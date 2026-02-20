@@ -656,8 +656,9 @@ def register_user_loop(user_id: str) -> None:
             args=[user_id],
             id=job_id,
             replace_existing=True,
+            next_run_time=datetime.now(),  # Fire immediately on first registration
         )
-        logger.info(f"[Scheduler] Registered control loop for user {user_id[:8]}")
+        logger.info(f"[Scheduler] Registered control loop for user {user_id[:8]} (immediate first tick)")
 
 
 def unregister_user_loop(user_id: str) -> None:

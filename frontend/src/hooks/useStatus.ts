@@ -37,9 +37,17 @@ export function useStatus(): UseStatusReturn {
     // Initial fetch attempt
     fetchStatus()
 
+    // Fast retries on initial load to catch first control loop tick
+    const retry1 = setTimeout(fetchStatus, 3000)
+    const retry2 = setTimeout(fetchStatus, 8000)
+
     // Poll every 30 seconds
     const interval = setInterval(fetchStatus, STATUS_POLL_INTERVAL)
-    return () => clearInterval(interval)
+    return () => {
+      clearTimeout(retry1)
+      clearTimeout(retry2)
+      clearInterval(interval)
+    }
   }, [fetchStatus])
 
   return { status, loading, error, refresh: fetchStatus }
