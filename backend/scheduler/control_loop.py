@@ -153,11 +153,23 @@ async def _fetch_data(state: UserLoopState) -> bool:
         except Exception as e:
             logger.error(f"[{state.user_id[:8]}] Location fetch failed: {e}")
 
+    # Auto-populate home location from Tesla GPS if not set
+    home_lat = float(state.settings.get("home_lat", 0))
+    home_lon = float(state.settings.get("home_lon", 0))
+    if (not home_lat or not home_lon) and state.location and state.location.is_at_home:
+        home_lat = state.location.latitude
+        home_lon = state.location.longitude
+        if home_lat and home_lon:
+            from services.supabase_client import upsert_user_setting
+            upsert_user_setting(user_id, "home_lat", str(home_lat))
+            upsert_user_setting(user_id, "home_lon", str(home_lon))
+            state.settings["home_lat"] = str(home_lat)
+            state.settings["home_lon"] = str(home_lon)
+            logger.info(f"[{user_id[:8]}] Auto-set home location from Tesla GPS: {home_lat}, {home_lon}")
+
     # Fetch weather (every 60 minutes)
     if now - state.last_weather_fetch > 3600 or state.forecast is None:
         try:
-            home_lat = float(state.settings.get("home_lat", 0))
-            home_lon = float(state.settings.get("home_lon", 0))
             tz = state.settings.get("timezone", "Asia/Manila")
             if home_lat and home_lon:
                 state.forecast = await fetch_forecast(home_lat, home_lon, tz)

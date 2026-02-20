@@ -17,7 +17,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material'
-import { Check, Globe, Sun, Car, Bot, Send } from 'lucide-react'
+import { Check, Globe, Sun, Car, Bot, Send, MapPin } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 export function Settings() {
   const [currency, setCurrency] = useState('PHP')
@@ -92,6 +92,76 @@ export function Settings() {
     setNotifSaved(true)
     setTimeout(() => setNotifSaved(false), 2500)
   }
+
+  // Home Location state
+  const [homeLat, setHomeLat] = useState('')
+  const [homeLon, setHomeLon] = useState('')
+  const [savedLocation, setSavedLocation] = useState({ lat: '', lon: '' })
+  const [locationSaved, setLocationSaved] = useState(false)
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geoError, setGeoError] = useState<string | null>(null)
+  const locationDirty = homeLat !== savedLocation.lat || homeLon !== savedLocation.lon
+
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      setGeoError('Geolocation is not supported by your browser')
+      return
+    }
+    setGeoLoading(true)
+    setGeoError(null)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setHomeLat(pos.coords.latitude.toFixed(6))
+        setHomeLon(pos.coords.longitude.toFixed(6))
+        setGeoLoading(false)
+      },
+      (err) => {
+        setGeoError(`Location access denied: ${err.message}`)
+        setGeoLoading(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  const handleSaveLocation = async () => {
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          home_lat: parseFloat(homeLat),
+          home_lon: parseFloat(homeLon),
+        }),
+      })
+      setSavedLocation({ lat: homeLat, lon: homeLon })
+      setLocationSaved(true)
+      setTimeout(() => setLocationSaved(false), 2500)
+    } catch (e) {
+      console.warn('[Settings] Failed to save location:', e)
+    }
+  }
+
+  // Load home location from backend on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const res = await apiFetch('/api/settings')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.home_lat) {
+            setHomeLat(String(data.home_lat))
+            setSavedLocation((prev) => ({ ...prev, lat: String(data.home_lat) }))
+          }
+          if (data.home_lon) {
+            setHomeLon(String(data.home_lon))
+            setSavedLocation((prev) => ({ ...prev, lon: String(data.home_lon) }))
+          }
+        }
+      } catch (e) {
+        console.warn('[Settings] Failed to load settings:', e)
+      }
+    }
+    loadSettings()
+  }, [])
 
   // API Credentials state
   const [solaxTokenId, setSolaxTokenId] = useState('202508151014313779537711')
@@ -430,6 +500,116 @@ export function Settings() {
               ml: 2,
               flexShrink: 0,
               opacity: timezoneDirty ? 1 : 0.4,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            Save
+          </Button>
+        </Box>
+      </Card>
+
+      {/* Home Location */}
+      <Card
+        sx={{
+          p: 3,
+          mb: 3,
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 3,
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+            }}
+          >
+            <MapPin size={18} color="#22c55e" />
+            <Typography variant="h6" fontWeight="600">
+              Home Location
+            </Typography>
+          </Box>
+          <Fade in={locationSaved}>
+            <Chip
+              icon={<Check size={14} />}
+              label="Saved"
+              size="small"
+              sx={{
+                bgcolor: 'rgba(34,197,94,0.12)',
+                color: '#22c55e',
+                border: '1px solid rgba(34,197,94,0.3)',
+                fontWeight: 600,
+                '& .MuiChip-icon': {
+                  color: '#22c55e',
+                },
+              }}
+            />
+          </Fade>
+        </Box>
+
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+          Used for solar forecasts (Open-Meteo), home detection (GPS fallback), and sunrise/sunset times.
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, alignItems: 'flex-start' }}>
+          <Button
+            variant="outlined"
+            onClick={handleUseMyLocation}
+            disabled={geoLoading}
+            startIcon={geoLoading ? <CircularProgress size={16} /> : <MapPin size={16} />}
+            sx={{ flexShrink: 0, height: 56 }}
+          >
+            {geoLoading ? 'Getting location...' : 'Use My Location'}
+          </Button>
+          <TextField
+            label="Latitude"
+            value={homeLat}
+            onChange={(e) => setHomeLat(e.target.value)}
+            placeholder="14.5995"
+            sx={{ width: 160, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+          />
+          <TextField
+            label="Longitude"
+            value={homeLon}
+            onChange={(e) => setHomeLon(e.target.value)}
+            placeholder="120.9842"
+            sx={{ width: 160, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+          />
+        </Box>
+
+        {geoError && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {geoError}
+          </Alert>
+        )}
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            {homeLat && homeLon
+              ? `📍 ${homeLat}, ${homeLon}`
+              : 'No location set — solar forecast and home detection require this.'}
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            disabled={!locationDirty || !homeLat || !homeLon}
+            onClick={handleSaveLocation}
+            sx={{
+              ml: 2,
+              flexShrink: 0,
+              opacity: locationDirty && homeLat && homeLon ? 1 : 0.4,
               transition: 'opacity 0.2s',
             }}
           >
