@@ -72,45 +72,90 @@ def build_prompt(
     household_w: float,
     grid_import_w: float,
     battery_soc: int,
+    battery_w: float,
     tesla_soc: int,
     target_soc: int,
     current_amps: int,
     grid_budget_remaining_kwh: float,
+    grid_budget_total_kwh: float,
+    max_grid_import_w: float,
     hours_until_sunset: float,
     irradiance_curve: str,
     trigger_reason: str,
+    charging_strategy: str = "departure",
+    departure_time: str = "",
+    solar_trend: str = "stable",
+    session_elapsed_mins: int = 0,
+    session_kwh_added: float = 0.0,
+    session_solar_pct: float = 0.0,
 ) -> str:
     """Build the AI prompt with full context for optimization decision.
 
     Based on SPEC.md prompt template.
     """
-    return f"""You are an EV charging optimizer for a home solar system. Your job is to recommend the optimal Tesla charging amperage (5-32A, or 0 to stop) that maximizes solar self-consumption and minimizes grid import.
+    soc_gap = max(0, target_soc - tesla_soc)
+    battery_capacity_kwh = 75.0  # Tesla Model 3/Y typical
+    kwh_needed = (soc_gap / 100.0) * battery_capacity_kwh
+    
+    # Departure time context
+    departure_context = ""
+    if departure_time and charging_strategy == "departure":
+        departure_context = f"\nDeparture time: {departure_time} (charging strategy: Ready by departure)"
+    elif charging_strategy == "solar":
+        departure_context = "\nCharging strategy: Solar-first (maximize solar subsidy, grid draw avoided)"
+    
+    return f"""You are a solar EV charging optimizer for a home in the Philippines (Manila time, PHT +8).
+Recommend a Tesla charging rate in amps (5-32A) or 0 to stop.
+Your goal: autonomously manage amperage via Tessie to maximize solar efficiency while respecting constraints.
 
-Current state:
-- Solar production: {solar_w}W
-- Household demand: {household_w}W
-- Grid import: {grid_import_w}W (positive = importing from grid)
-- Home battery SoC: {battery_soc}%
-- Tesla SoC: {tesla_soc}% → target {target_soc}%
-- Current charging rate: {current_amps}A
-- Grid budget remaining: {grid_budget_remaining_kwh:.1f} kWh today
-- Hours until sunset: {hours_until_sunset:.1f}h
-- Trigger: {trigger_reason}
+=== CHARGING STRATEGY ===
+Mode: {charging_strategy}  [solar | departure]
+Target SoC: {target_soc}% (currently {tesla_soc}%, gap: {soc_gap}%, ~{kwh_needed:.1f} kWh needed){departure_context}
+Grid import budget remaining: {grid_budget_remaining_kwh:.1f} kWh (of {grid_budget_total_kwh:.1f} kWh daily limit)
+Max grid import rate: {max_grid_import_w:.0f}W
 
-Solar forecast (remaining hours):
+=== ACTUAL CONDITIONS (Solax — ground truth) ===
+Solar yield: {solar_w:.0f}W  |  Trend (last 5 min): {solar_trend}  [rising | stable | falling]
+Household demand: {household_w:.0f}W
+Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
+Home battery SoC: {battery_soc}%  |  Battery power: {battery_w:.0f}W
+
+=== SOLAR FORECAST (Open-Meteo — predictive) ===
+Hours until sunset: {hours_until_sunset:.1f}h
+
+Remaining hourly forecast:
 {irradiance_curve}
 
-Rules:
-1. Available solar for EV = solar_w - household_w (never go negative)
-2. Each amp ≈ 240W at 240V circuit
-3. Prefer gradual changes (±2A per adjustment) for battery health
-4. If grid budget is low (<1 kWh remaining), reduce aggressively
-5. If solar is declining and Tesla SoC is close to target, maintain or reduce
-6. If peak solar window is approaching, you may hold current rate and increase later
-7. 0A means stop charging entirely
+=== SESSION CONTEXT ===
+Session elapsed: {session_elapsed_mins} min
+kWh added this session: {session_kwh_added:.2f}
+Solar subsidy so far: {session_solar_pct:.0f}%
+Current charging rate: {current_amps}A
+Trigger reason: {trigger_reason}
 
-Respond with JSON only:
-{{"recommended_amps": <int 0-32>, "reasoning": "<1-2 sentence explanation>", "confidence": "<low|medium|high>"}}"""
+=== REASONING GUIDANCE ===
+- Weight Solax actual data most heavily for the next 5-15 minutes
+- Use Open-Meteo forecast for planning decisions beyond 15 minutes
+- If solar_trend is "falling" but forecast shows recovery within 30 min, consider holding current rate
+- If SoC gap cannot be closed with solar alone before sunset and strategy is "departure", recommend minimum grid draw to bridge the gap
+- If strategy is "solar", prioritize zero or minimal grid draw even if target SoC may not be reached
+- Never recommend amps that would cause grid import to exceed {max_grid_import_w:.0f}W or exhaust budget_remaining_kwh
+- Each amp ≈ 240W at 240V circuit
+- Prefer gradual changes (±2A per adjustment) for battery health
+- 0A means stop charging entirely
+
+=== REASONING MESSAGE INSTRUCTIONS ===
+The "reasoning" field is displayed directly to the user in the app banner. Write it to actively narrate what you're doing and why:
+- Name the primary signal that drove the decision (e.g. "Solar at 2,840W and rising", "Grid budget 85% used")
+- State what you're anticipating or protecting against (e.g. "holding rate for cloud recovery", "throttling to preserve budget")
+- Be 1-2 short sentences max. Plain English. No jargon.
+- Feel like a knowledgeable assistant explaining a decision, not a data readout.
+
+Good: "Solar at 2,840W and rising — pushing to 18A to capture the peak window before 2pm."
+Bad: "Recommended amps: 18. Solar yield high. Irradiance peak approaching."
+
+Respond ONLY in JSON (no preamble, no explanation outside JSON):
+{{"recommended_amps": <int 0-32>, "reasoning": "<1-2 sentences>", "confidence": "low|medium|high"}}"""
 
 
 async def call_ollama(prompt: str, trigger_reason: str = "scheduled") -> AIRecommendation:

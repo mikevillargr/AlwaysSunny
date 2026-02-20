@@ -222,19 +222,33 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
         grid_budget_total = float(state.settings.get("daily_grid_budget_kwh", 0))
         grid_used = state.session_tracker.active.grid_kwh if state.session_tracker.active else 0
         grid_remaining = max(0, grid_budget_total - grid_used)
+        
+        session = state.session_tracker.active
+        session_elapsed_mins = int((time.time() - session.start_time) / 60) if session else 0
+        session_kwh_added = session.kwh_added if session else 0.0
+        session_solar_pct = session.solar_pct if session else 0.0
 
         prompt = build_prompt(
             solar_w=state.solax.solar_w,
             household_w=state.solax.household_demand_w,
             grid_import_w=state.solax.grid_import_w,
             battery_soc=state.solax.battery_soc,
+            battery_w=state.solax.battery_w,
             tesla_soc=state.tesla.battery_level,
             target_soc=int(state.settings.get("target_soc", 80)),
             current_amps=state.tesla.charger_actual_current,
             grid_budget_remaining_kwh=grid_remaining,
+            grid_budget_total_kwh=grid_budget_total,
+            max_grid_import_w=float(state.settings.get("max_grid_import_w", 7000)),
             hours_until_sunset=state.forecast.hours_until_sunset(),
             irradiance_curve=state.forecast.build_irradiance_curve_for_ai(),
             trigger_reason=trigger_reason,
+            charging_strategy=state.settings.get("charging_strategy", "departure"),
+            departure_time=state.settings.get("departure_time", ""),
+            solar_trend=state.solar_trend,
+            session_elapsed_mins=session_elapsed_mins,
+            session_kwh_added=session_kwh_added,
+            session_solar_pct=session_solar_pct,
         )
 
         state.ai_recommendation = await call_ollama(prompt, trigger_reason)
@@ -384,10 +398,61 @@ async def _control_tick(user_id: str) -> None:
     elif state.ai_enabled:
         ai_age = now - state.last_ai_call
         trigger = None
+        
+        # Baseline: scheduled 5-min interval
         if ai_age > 300:
             trigger = "scheduled"
-        elif state.solar_trend != "stable" and ai_age > 90:
-            trigger = "solar_shift"
+        
+        # Event triggers (with 90s minimum gap to prevent hammering)
+        elif ai_age > 90:
+            # Solar trend shift
+            if state.solar_trend != "stable":
+                trigger = "solar_shift"
+            
+            # SoC threshold: 75% or 95% of gap closed
+            target_soc = int(state.settings.get("target_soc", 100))
+            soc_gap = max(0, target_soc - tesla.battery_level)
+            soc_progress = 0 if target_soc == tesla.battery_level else (100 - soc_gap) / 100.0
+            if soc_progress >= 0.75 and not hasattr(state, '_soc_75_triggered'):
+                trigger = "soc_threshold"
+                state._soc_75_triggered = True
+            elif soc_progress >= 0.95 and not hasattr(state, '_soc_95_triggered'):
+                trigger = "soc_threshold"
+                state._soc_95_triggered = True
+            
+            # Budget warning: 80% or 95% of daily limit
+            grid_budget_total = float(state.settings.get("daily_grid_budget_kwh", 0))
+            if grid_budget_total > 0:
+                grid_used = (solax.consume_energy_kwh - state.daily_grid_start_kwh) if state.daily_grid_date else 0
+                budget_pct = (grid_used / grid_budget_total) if grid_budget_total > 0 else 0
+                if budget_pct >= 0.80 and not hasattr(state, '_budget_80_triggered'):
+                    trigger = "budget_warning"
+                    state._budget_80_triggered = True
+                elif budget_pct >= 0.95 and not hasattr(state, '_budget_95_triggered'):
+                    trigger = "budget_warning"
+                    state._budget_95_triggered = True
+            
+            # Departure urgency: < 60 min away and SoC < target
+            departure_time_str = state.settings.get("departure_time", "")
+            if departure_time_str and soc_gap > 0:
+                try:
+                    from datetime import datetime
+                    now_dt = datetime.now()
+                    dep_h, dep_m = departure_time_str.split(":")[:2]
+                    dep_dt = now_dt.replace(hour=int(dep_h), minute=int(dep_m), second=0)
+                    if dep_dt <= now_dt:
+                        dep_dt = dep_dt.replace(day=dep_dt.day + 1)
+                    mins_until_departure = (dep_dt - now_dt).total_seconds() / 60
+                    if mins_until_departure < 60 and not hasattr(state, '_departure_triggered'):
+                        trigger = "departure_soon"
+                        state._departure_triggered = True
+                except (ValueError, IndexError):
+                    pass
+        
+        # Stale recommendation: > 6 min old
+        if ai_age > 360:
+            trigger = "stale"
+        
         if trigger:
             await _maybe_call_ai(state, trigger)
 
@@ -396,11 +461,19 @@ async def _control_tick(user_id: str) -> None:
             and state.ai_recommendation.is_fresh
             and state.ai_recommendation.recommended_amps >= 0
         ):
+            # AI has full control — use its recommendation as final setpoint
+            # Skip grid import limit throttling and rule-based strategies
+            # AI already receives max_grid_import_w, charging_strategy, and all constraints in prompt
             final_amps = state.ai_recommendation.recommended_amps
             state.mode = "AI Optimizing"
+            logger.debug(
+                f"[{state.user_id[:8]}] AI control: {final_amps}A "
+                f"({state.ai_recommendation.confidence}) — {state.ai_recommendation.reasoning[:40]}"
+            )
         else:
             # AI enabled but no fresh recommendation — fall through to rule-based
             state.ai_status = "fallback"
+            logger.debug(f"[{state.user_id[:8]}] AI stale/unavailable — using rule-based fallback")
 
     # 4c. Strategy-based charging (fallback when no manual override or AI)
     charging_strategy = state.settings.get("charging_strategy", "departure")

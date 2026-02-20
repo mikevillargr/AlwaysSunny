@@ -4,18 +4,22 @@ import { Car, Bot } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
 interface AmperageControlProps {
-  autoOptimize?: boolean
+  autoOptimize: boolean
   teslaChargingAmps: number
   teslaChargingKw: number
   tessieEnabled?: boolean
+  chargePortConnected?: boolean
 }
+
 export function AmperageControl({
-  autoOptimize = false,
+  autoOptimize,
   teslaChargingAmps,
   teslaChargingKw,
   tessieEnabled = true,
+  chargePortConnected = false,
 }: AmperageControlProps) {
-  const disabled = autoOptimize || !tessieEnabled
+  const controlsEnabled = tessieEnabled && chargePortConnected
+  const disabled = !controlsEnabled || autoOptimize
   const [localAmps, setLocalAmps] = useState<number>(teslaChargingAmps)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -50,19 +54,19 @@ export function AmperageControl({
       sx={{
         p: 2.5,
         mb: 3,
-        border: !tessieEnabled
+        border: !controlsEnabled
           ? '1px solid #2a3f57'
           : autoOptimize
             ? '1px solid rgba(168, 85, 247, 0.25)'
             : '1px solid #22c55e',
-        boxShadow: !tessieEnabled
+        boxShadow: !controlsEnabled
           ? 'none'
           : autoOptimize
             ? '0 4px 20px rgba(168, 85, 247, 0.1)'
             : '0 4px 20px rgba(34, 197, 94, 0.15)',
-        opacity: tessieEnabled ? 1 : 0.45,
+        opacity: controlsEnabled ? 1 : 0.45,
         transition: 'all 0.2s ease',
-        pointerEvents: tessieEnabled ? 'auto' : 'none',
+        pointerEvents: controlsEnabled ? 'auto' : 'none',
       }}
     >
       <Box

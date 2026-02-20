@@ -64,6 +64,48 @@ async def toggle_optimization(
     return {"ai_enabled": body.enabled}
 
 
+@router.post("/optimize/refresh")
+async def refresh_ai_recommendation(
+    user: dict = Depends(get_current_user),
+):
+    """Manually trigger an immediate AI recommendation refresh.
+    
+    Forces an AI call with trigger_reason='manual', bypassing the 90s minimum gap.
+    Useful for testing or when user wants immediate AI re-evaluation.
+    """
+    user_id = user["id"]
+    
+    from scheduler.control_loop import get_user_state, _maybe_call_ai
+    state = get_user_state(user_id)
+    
+    if not state:
+        raise HTTPException(status_code=404, detail="User control loop not initialized")
+    
+    if not state.ai_enabled:
+        raise HTTPException(status_code=409, detail="AI optimization is disabled")
+    
+    # Bypass the 90s minimum gap by setting last_ai_call to 0
+    state.last_ai_call = 0
+    
+    # Trigger AI call with 'manual' reason
+    try:
+        await _maybe_call_ai(state, "manual")
+        
+        if state.ai_recommendation:
+            return {
+                "status": "success",
+                "recommended_amps": state.ai_recommendation.recommended_amps,
+                "reasoning": state.ai_recommendation.reasoning,
+                "confidence": state.ai_recommendation.confidence,
+                "trigger_reason": "manual",
+            }
+        else:
+            raise HTTPException(status_code=502, detail="AI call failed or returned no recommendation")
+    except Exception as e:
+        logger.error(f"[{user_id[:8]}] Manual AI refresh failed: {e}")
+        raise HTTPException(status_code=502, detail=f"AI refresh failed: {str(e)}")
+
+
 @router.post("/override/amps")
 async def override_amps(
     body: AmpsOverride,

@@ -26,6 +26,8 @@ interface ChargingControlsProps {
   gridBudgetUsedKwh: number
   gridBudgetPct: number
   tessieEnabled?: boolean
+  chargePortConnected?: boolean
+  autoOptimize?: boolean
 }
 
 export function ChargingControls({
@@ -35,7 +37,10 @@ export function ChargingControls({
   gridBudgetUsedKwh,
   gridBudgetPct,
   tessieEnabled = true,
+  chargePortConnected = false,
+  autoOptimize = false,
 }: ChargingControlsProps) {
+  const controlsEnabled = tessieEnabled && chargePortConnected
   const [targetSoC, setTargetSoC] = useState<number>(80)
   const [gridBudget, setGridBudget] = useState<number>(25)
   const [gridImportLimit, setGridImportLimit] = useState<number>(7000)
@@ -110,8 +115,8 @@ export function ChargingControls({
       sx={{
         p: 3,
         mb: 3,
-        opacity: tessieEnabled ? 1 : 0.45,
-        pointerEvents: tessieEnabled ? 'auto' : 'none',
+        opacity: controlsEnabled ? 1 : 0.45,
+        pointerEvents: controlsEnabled ? 'auto' : 'none',
         transition: 'opacity 0.2s ease',
         position: 'relative',
       }}
@@ -724,6 +729,10 @@ export function ChargingControls({
               xs: 2.5,
               md: 0,
             },
+            opacity: autoOptimize ? 0.4 : 1,
+            pointerEvents: autoOptimize ? 'none' : 'auto',
+            transition: 'opacity 0.2s ease',
+            position: 'relative',
           }}
         >
           <Box
@@ -890,7 +899,7 @@ export function ChargingControls({
                   display: 'block',
                 }}
               >
-                Tesla throttles to stay under limit
+                {autoOptimize ? 'Managed by AI' : 'Tesla throttles to stay under limit'}
               </Typography>
             </>
           )}
