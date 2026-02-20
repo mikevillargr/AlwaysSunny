@@ -1,5 +1,8 @@
 """AlwaysSunny — FastAPI backend entry point."""
 
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

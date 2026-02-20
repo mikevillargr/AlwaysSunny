@@ -14,6 +14,7 @@ class ForecastHour(BaseModel):
     irradiance_wm2: float
     expected_yield_w: float
     cloud_cover_pct: float
+    temperature_c: float = 0.0
 
 
 class Forecast(BaseModel):

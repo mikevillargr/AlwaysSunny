@@ -541,8 +541,16 @@ async def _control_tick(user_id: str) -> None:
     if not state.session_tracker._recovered and tesla.charge_port_connected:
         db_active = get_active_session(user_id)
         if db_active:
-            state.session_tracker.recover_from_db(db_active, solax.consume_energy_kwh, meralco_rate)
-            logger.info(f"[{state.user_id[:8]}] Recovered active session #{db_active['id']} from DB")
+            # Restore persisted start_grid_kwh from settings
+            saved_start_grid = state.settings.get("_session_start_grid_kwh", "")
+            if saved_start_grid:
+                start_grid_kwh = float(saved_start_grid)
+            else:
+                # No persisted value — use current (grid_kwh will be 0 until next session)
+                start_grid_kwh = solax.consume_energy_kwh
+                logger.warning(f"[{state.user_id[:8]}] No persisted start_grid_kwh — using current value")
+            state.session_tracker.recover_from_db(db_active, start_grid_kwh, meralco_rate)
+            logger.info(f"[{state.user_id[:8]}] Recovered session #{db_active['id']}, start_grid_kwh={start_grid_kwh:.2f}")
         else:
             state.session_tracker._recovered = True  # No DB session to recover
 
@@ -559,6 +567,8 @@ async def _control_tick(user_id: str) -> None:
     )
 
     if event == "started" and data:
+        # Persist start_grid_kwh so it survives restarts
+        upsert_user_setting(user_id, "_session_start_grid_kwh", str(solax.consume_energy_kwh))
         result = db_start_session(user_id, data)
         if state.session_tracker.active and result.get("id"):
             state.session_tracker.active.db_session_id = result["id"]
