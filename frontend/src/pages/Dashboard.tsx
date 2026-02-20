@@ -6,6 +6,7 @@ import { SessionStats } from '../components/SessionStats'
 import { SolarForecastChart } from '../components/SolarForecastChart'
 import { AIRecommendationStrip } from '../components/AIRecommendationStrip'
 import { GridBudgetWeather } from '../components/GridBudgetWeather'
+import { ChargingOutlook } from '../components/ChargingOutlook'
 import { ChargingControls } from '../components/ChargingControls'
 import { AmperageControl } from '../components/AmperageControl'
 import { useStatus } from '../hooks/useStatus'
@@ -133,6 +134,9 @@ export function Dashboard() {
           <GridBudgetWeather
             forecast={status.forecast}
           />
+        </Grid>
+        <Grid item xs={12}>
+          <ChargingOutlook />
         </Grid>
       </Grid>
     </Box>

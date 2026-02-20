@@ -76,6 +76,11 @@ class UserLoopState:
     daily_grid_start_kwh: float = 0.0  # consumeenergy snapshot at midnight
     daily_grid_date: str = ""  # YYYY-MM-DD of last reset
 
+    # Charging outlook (AI-generated narrative, refreshed hourly)
+    outlook_text: str = ""
+    outlook_generated_at: str = ""
+    last_outlook_fetch: float = 0
+
     # Credentials (cached from DB)
     creds: dict = field(default_factory=dict)
     settings: dict = field(default_factory=dict)
@@ -510,9 +515,8 @@ async def _control_tick(user_id: str) -> None:
                 # AI has full control — use its recommendation as final setpoint
                 # Skip grid import limit throttling and rule-based strategies
                 # AI already receives max_grid_import_w, charging_strategy, and all constraints in prompt
-                raw_amps = state.ai_recommendation.recommended_amps
-                # Tesla minimum is 5A — clamp anything below to 0 (stop charging)
-                final_amps = raw_amps if raw_amps == 0 or raw_amps >= 5 else 0
+                # Note: 1-4A clamping already handled in AIRecommendation.__init__
+                final_amps = state.ai_recommendation.recommended_amps
                 state.mode = "AI Optimizing"
                 logger.debug(
                     f"[{state.user_id[:8]}] AI control: {final_amps}A "

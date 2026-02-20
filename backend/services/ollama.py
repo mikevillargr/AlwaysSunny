@@ -44,6 +44,15 @@ class AIRecommendation:
             self.confidence = "low"
             self.reasoning = f"AI returned invalid amps ({parsed.get('recommended_amps')}), using fallback"
 
+        # Tesla minimum is 5A — clamp 1-4A to 0 and rewrite reasoning
+        if 1 <= self.recommended_amps <= 4:
+            original = self.recommended_amps
+            self.recommended_amps = 0
+            self.reasoning = (
+                f"Solar surplus only supports {original}A — below Tesla's 5A minimum. "
+                f"Pausing until conditions improve."
+            )
+
         if self.confidence not in ("low", "medium", "high"):
             self.confidence = "low"
 
@@ -225,10 +234,19 @@ Trigger reason: {trigger_reason}
 - If solar_trend is "falling" but forecast shows recovery within 30 min, consider holding current rate
 - Recommend the IDEAL target amps — the system handles ramping. Do NOT limit to small increments.
 - Your recommendation should be AT LEAST max solar amps when surplus exists and SoC gap remains
-- If solar surplus < 1200W (below 5A minimum), recommend 0A to stop charging
-- Never exceed grid import budget or max grid import rate
 - DEPARTURE mode: if behind pace, draw from grid. If ahead, stay solar-only.
-- SOLAR mode: avoid grid draw even if target SoC won't be reached. Be patient.
+- SOLAR mode: minimize grid draw. Be patient. Accept partial charge if solar is insufficient.
+
+=== GRID DRAW POLICY (important — overarching goal is to MINIMIZE grid draw) ===
+- If grid budget is 0 (no budget set / unlimited): MINIMIZE grid draw as much as possible.
+  - If solar surplus is 700-1200W (close to 5A but not quite), allow charging at 5A with minor grid draw (~500W buffer) to avoid constant start/stop cycling.
+  - If solar surplus < 700W, recommend 0A — not enough solar to justify any grid draw.
+  - Never draw more than ~1000W from grid when no budget is set, unless in DEPARTURE mode with time pressure.
+- If grid budget > 0 (budget is set):
+  - When budget remaining > 10%: allow grid draw freely up to the budget limit. The user has explicitly allocated this grid energy.
+  - When budget remaining < 10%: throttle aggressively — reduce to solar-only or minimum amps.
+  - It's acceptable to slightly exceed the budget (by ~5%) if needed to reach target SoC in departure mode.
+- Never exceed the max grid import rate ({max_grid_import_w:.0f}W) regardless of budget.
 
 === REASONING MESSAGE INSTRUCTIONS ===
 The "reasoning" field is shown to the user in the app. It MUST:

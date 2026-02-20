@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from routers import status, sessions, settings, control, health, credentials, debug
+from routers import status, sessions, settings, control, health, credentials, debug, outlook
 from scheduler.control_loop import start_scheduler, stop_scheduler
 
 
@@ -54,6 +54,7 @@ app.include_router(control.router, prefix="/api", tags=["control"])
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(credentials.router, prefix="/api", tags=["credentials"])
 app.include_router(debug.router, prefix="/api", tags=["debug"])
+app.include_router(outlook.router, prefix="/api", tags=["outlook"])
 
 
 @app.get("/")
