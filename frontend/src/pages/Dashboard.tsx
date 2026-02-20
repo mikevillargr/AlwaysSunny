@@ -72,6 +72,7 @@ export function Dashboard() {
         tessieEnabled={tessieEnabled}
         onTessieToggle={handleTessieToggle}
       />
+      <ChargingOutlook />
       <AIRecommendationStrip
         autoOptimize={autoOptimize}
         onAutoOptimizeChange={handleAutoOptimizeChange}
@@ -135,9 +136,6 @@ export function Dashboard() {
           <GridBudgetWeather
             forecast={status.forecast}
           />
-        </Grid>
-        <Grid item xs={12}>
-          <ChargingOutlook />
         </Grid>
       </Grid>
     </Box>
