@@ -100,6 +100,26 @@ class SessionTracker:
     def __init__(self):
         self.active: ActiveSession | None = None
         self._prev_plugged_in: bool = False
+        self._recovered: bool = False
+
+    def recover_from_db(self, db_session: dict | None, consume_energy_kwh: float, meralco_rate: float) -> None:
+        """Recover an active session from the DB after backend restart.
+
+        Called once on first tick when car is already plugged in.
+        """
+        if not db_session or self._recovered:
+            return
+        self._recovered = True
+        self.active = ActiveSession(
+            user_id=db_session["user_id"],
+            db_session_id=db_session["id"],
+            start_time=datetime.fromisoformat(db_session["started_at"]).timestamp(),
+            start_soc=db_session.get("start_soc", 0),
+            target_soc=db_session.get("target_soc", 80),
+            start_grid_kwh=consume_energy_kwh - (db_session.get("grid_kwh") or 0),
+            meralco_rate=meralco_rate,
+        )
+        self._prev_plugged_in = True
 
     def tick(
         self,

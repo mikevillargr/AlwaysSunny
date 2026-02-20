@@ -34,6 +34,8 @@ from services.supabase_client import (
     save_snapshot,
     start_session as db_start_session,
     end_session as db_end_session,
+    get_active_session,
+    upsert_user_setting,
 )
 
 logger = logging.getLogger("alwayssunny.control")
@@ -164,7 +166,6 @@ async def _fetch_data(state: UserLoopState) -> bool:
         home_lat = state.location.latitude
         home_lon = state.location.longitude
         if home_lat and home_lon:
-            from services.supabase_client import upsert_user_setting
             upsert_user_setting(state.user_id, "home_lat", str(home_lat))
             upsert_user_setting(state.user_id, "home_lon", str(home_lon))
             state.settings["home_lat"] = str(home_lat)
@@ -535,8 +536,16 @@ async def _control_tick(user_id: str) -> None:
         except Exception as e:
             logger.error(f"[{state.user_id[:8]}] Tesla command failed: {e}")
 
-    # 7. Session tracking
+    # 7. Session tracking — recover from DB on restart if car is already plugged in
     meralco_rate = float(state.settings.get("meralco_rate", 10.83))
+    if not state.session_tracker._recovered and tesla.charge_port_connected:
+        db_active = get_active_session(user_id)
+        if db_active:
+            state.session_tracker.recover_from_db(db_active, solax.consume_energy_kwh, meralco_rate)
+            logger.info(f"[{state.user_id[:8]}] Recovered active session #{db_active['id']} from DB")
+        else:
+            state.session_tracker._recovered = True  # No DB session to recover
+
     event, data = state.session_tracker.tick(
         user_id=user_id,
         plugged_in=tesla.charge_port_connected,
