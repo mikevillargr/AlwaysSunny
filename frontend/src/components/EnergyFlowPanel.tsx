@@ -274,7 +274,7 @@ export function EnergyFlowPanel({
               fontSize="10"
               opacity={tessieEnabled ? 0.8 : 0.4}
             >
-              {tessieEnabled ? `${fmt(teslaW)} · ${teslaChargingAmps}A` : '—'}
+              {tessieEnabled ? fmt(teslaW) : '—'}
             </text>
 
             {/* Home → Grid line (lower right) */}
@@ -458,8 +458,8 @@ export function EnergyFlowPanel({
             },
             {
               label: 'CHARGING',
-              value: tessieEnabled ? String(teslaChargingAmps) : '—',
-              unit: tessieEnabled ? 'A' : '',
+              value: tessieEnabled ? fmtComma(teslaW) : '—',
+              unit: tessieEnabled ? 'W' : '',
               color: teslaColor,
             },
           ].map((stat, i) => (

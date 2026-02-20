@@ -286,7 +286,7 @@ export function SessionStats({
             CHARGING AT
           </Typography>
           <Typography variant="body1" fontWeight="600">
-            {safeAmps}A · {safeKw.toFixed(1)} kW
+            {Math.round(safeKw * 1000)}W · {safeAmps}A
           </Typography>
         </Grid>
         <Grid item xs={6}>
