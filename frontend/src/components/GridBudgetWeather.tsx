@@ -2,6 +2,7 @@ import React from 'react'
 import { Card, Box, Typography } from '@mui/material'
 import { CloudSun, Thermometer, Zap } from 'lucide-react'
 import type { Forecast } from '../types/api'
+import { formatHour12 } from '../utils/constants'
 
 interface GridBudgetWeatherProps {
   forecast: Forecast
@@ -173,7 +174,7 @@ export function GridBudgetWeather({ forecast }: GridBudgetWeatherProps) {
           }}
         >
           {forecast.peak_window_start
-            ? `Peak solar window ${forecast.peak_window_start}–${forecast.peak_window_end}`
+            ? `Peak solar window ${formatHour12(forecast.peak_window_start)}–${formatHour12(forecast.peak_window_end)}`
             : 'No solar forecast available'}
         </Typography>
         <Typography

@@ -2,6 +2,7 @@ import React from 'react'
 import { Box, Card, Typography, Grid } from '@mui/material'
 import { CheckCircle, AlertCircle, PlugZap } from 'lucide-react'
 import type { Session } from '../types/api'
+import { formatHour12 } from '../utils/constants'
 
 interface SessionStatsProps {
   session: Session | null
@@ -307,7 +308,7 @@ export function SessionStats({
                 : `${minutesToFullCharge}m`
               : chargingStrategy === 'solar'
                 ? session ? `${session.elapsed_mins}m` : '—'
-                : departureTime ? departureTime : '—'}
+                : departureTime ? formatHour12(departureTime) : '—'}
           </Typography>
         </Grid>
         <Grid item xs={6}>

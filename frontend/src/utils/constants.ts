@@ -84,6 +84,21 @@ export const SAMPLE_STATUS = {
   grid_budget_pct: 42,
 }
 
+/**
+ * Convert 24-hour time string (e.g. "14:00", "07:30") to 12-hour format.
+ * Returns e.g. "2pm", "7:30am", "12pm", "12am".
+ */
+export function formatHour12(time: string): string {
+  if (!time) return ''
+  const [hStr, mStr] = time.split(':')
+  const h = parseInt(hStr, 10)
+  if (isNaN(h)) return time
+  const m = mStr ? parseInt(mStr, 10) : 0
+  const suffix = h >= 12 ? 'pm' : 'am'
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+  return m > 0 ? `${h12}:${String(m).padStart(2, '0')}${suffix}` : `${h12}${suffix}`
+}
+
 // AI trigger reason labels for display
 export const TRIGGER_LABELS: Record<string, string> = {
   scheduled: 'routine check',

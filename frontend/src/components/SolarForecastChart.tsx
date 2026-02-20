@@ -11,26 +11,20 @@ import {
 } from 'recharts'
 import { Sunrise, Sunset } from 'lucide-react'
 import type { Forecast } from '../types/api'
+import { formatHour12 } from '../utils/constants'
 
 interface SolarForecastChartProps {
   forecast: Forecast
 }
 
-function formatHour(h: string): string {
-  const num = parseInt(h.split(':')[0], 10)
-  if (num === 0) return '12am'
-  if (num === 12) return '12pm'
-  return num > 12 ? `${num - 12}pm` : `${num}am`
-}
-
 export function SolarForecastChart({ forecast }: SolarForecastChartProps) {
   const data = forecast.hourly.map((h) => ({
-    hour: formatHour(h.hour),
+    hour: formatHour12(h.hour),
     irradiance: h.irradiance_wm2,
   }))
 
   const currentHour = new Date().getHours()
-  const currentLabel = formatHour(`${currentHour}:00`)
+  const currentLabel = formatHour12(`${currentHour}:00`)
   return (
     <Card
       sx={{
@@ -122,7 +116,7 @@ export function SolarForecastChart({ forecast }: SolarForecastChartProps) {
               fontWeight: 600,
             }}
           >
-            {forecast.peak_window_start ? `${formatHour(forecast.peak_window_start)} – ${formatHour(forecast.peak_window_end)}` : '—'}
+            {forecast.peak_window_start ? `${formatHour12(forecast.peak_window_start)} – ${formatHour12(forecast.peak_window_end)}` : '—'}
           </span>
         </Typography>
         <Box
@@ -141,7 +135,7 @@ export function SolarForecastChart({ forecast }: SolarForecastChartProps) {
           >
             <Sunrise size={14} color="#8da4be" />
             <Typography variant="caption" color="text.secondary">
-              {forecast.sunrise || '—'}
+              {forecast.sunrise ? formatHour12(forecast.sunrise) : '—'}
             </Typography>
           </Box>
           <Box
@@ -153,7 +147,7 @@ export function SolarForecastChart({ forecast }: SolarForecastChartProps) {
           >
             <Sunset size={14} color="#8da4be" />
             <Typography variant="caption" color="text.secondary">
-              {forecast.sunset || '—'}
+              {forecast.sunset ? formatHour12(forecast.sunset) : '—'}
             </Typography>
           </Box>
         </Box>

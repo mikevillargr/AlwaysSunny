@@ -33,8 +33,26 @@ export function EnergyFlowPanel({
 }: EnergyFlowPanelProps) {
   const teslaW = teslaChargingKw * 1000
   const isCharging = chargingState === 'Charging' && chargePortConnected
-  const teslaColor = tessieEnabled ? '#22c55e' : '#4a6382'
-  const teslaOpacity = tessieEnabled ? 1 : 0.4
+  const isPluggedIn = chargePortConnected && !isCharging
+  const isOffline = !chargePortConnected
+
+  // Tesla visual states: charging=green, plugged=dim teal, offline=gray, disabled=dimgray
+  const teslaColor = !tessieEnabled
+    ? '#4a6382'
+    : isCharging
+      ? '#22c55e'
+      : isPluggedIn
+        ? '#14b8a6'
+        : '#64748b'
+  const teslaOpacity = !tessieEnabled ? 0.4 : isOffline ? 0.5 : 1
+  const teslaGlow = tessieEnabled && isCharging
+  const teslaStatusText = !tessieEnabled
+    ? 'OFF'
+    : isCharging
+      ? fmt(teslaW)
+      : isPluggedIn
+        ? 'PLUGGED IN'
+        : 'DISCONNECTED'
   return (
     <Card
       sx={{
@@ -136,10 +154,11 @@ export function EnergyFlowPanel({
             {/* === RIGHT: Tesla === */}
             <g transform="translate(490, 110)" opacity={teslaOpacity}>
               <circle
-                className={tessieEnabled ? 'pulsing-dot' : undefined}
+                className={teslaGlow ? 'pulsing-dot' : undefined}
                 cx="0" cy="0" r="38"
-                fill="#1e2d40" stroke={teslaColor} strokeWidth="3"
-                filter={tessieEnabled ? 'url(#glow-green)' : undefined}
+                fill="#1e2d40" stroke={teslaColor} strokeWidth={isCharging ? 3 : 2}
+                strokeDasharray={isOffline && tessieEnabled ? '6 4' : undefined}
+                filter={teslaGlow ? 'url(#glow-green)' : undefined}
               />
               <foreignObject x="-14" y="-14" width="28" height="28">
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -147,8 +166,8 @@ export function EnergyFlowPanel({
                 </div>
               </foreignObject>
               <text x="0" y="-48" textAnchor="middle" fill={teslaColor} fontSize="11" letterSpacing="1" fontWeight="bold">TESLA</text>
-              <text x="0" y="54" textAnchor="middle" fill={teslaColor} fontSize="12" fontWeight="bold">
-                {!tessieEnabled ? 'OFF' : isCharging ? fmt(teslaW) : chargePortConnected ? 'PLUGGED IN' : 'OFFLINE'}
+              <text x="0" y="54" textAnchor="middle" fill={teslaColor} fontSize={isOffline ? 10 : 12} fontWeight="bold">
+                {teslaStatusText}
               </text>
             </g>
 
@@ -167,16 +186,17 @@ export function EnergyFlowPanel({
             </text>
 
             {/* Home → Tesla */}
-            <path d="M322 110 L448 110" stroke={teslaColor} strokeWidth="1.5" fill="none" opacity={tessieEnabled ? 0.2 : 0.1} />
+            <path d="M322 110 L448 110" stroke={teslaColor} strokeWidth="1.5" fill="none" opacity={isCharging ? 0.2 : 0.1} />
             <path
               d="M322 110 L448 110"
               stroke={teslaColor} strokeWidth="1.5" fill="none"
-              className={tessieEnabled ? 'flow-line' : undefined}
-              markerEnd={tessieEnabled ? 'url(#arrow-green)' : undefined}
+              className={isCharging ? 'flow-line' : undefined}
+              strokeDasharray={isOffline && tessieEnabled ? '6 4' : undefined}
+              markerEnd={isCharging ? 'url(#arrow-green)' : undefined}
               opacity={teslaOpacity}
             />
             <text x="385" y="102" textAnchor="middle" fill={teslaColor} fontSize="10" opacity={tessieEnabled ? 0.8 : 0.4}>
-              {tessieEnabled ? fmt(teslaW) : '—'}
+              {isCharging ? fmt(teslaW) : isPluggedIn ? 'IDLE' : '—'}
             </text>
           </svg>
         </Box>

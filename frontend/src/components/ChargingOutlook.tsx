@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Card, Typography, Box, CircularProgress, Collapse } from '@mui/material'
 import { Sparkles, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { apiFetch } from '../lib/api'
+import { formatHour12 } from '../utils/constants'
 
 interface OutlookData {
   text: string
@@ -116,7 +117,7 @@ export function ChargingOutlook() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {outlook?.generated_at && (
             <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem' }}>
-              {outlook.generated_at}
+              {formatHour12(outlook.generated_at)}
             </Typography>
           )}
           {expanded ? (
