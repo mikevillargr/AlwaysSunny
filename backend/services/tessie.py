@@ -26,6 +26,8 @@ class TeslaState:
         self.charger_actual_current = int(charge.get("charger_actual_current") or 0)
         self.charger_voltage = int(charge.get("charger_voltage") or 0)
         self.charge_limit_soc = int(charge.get("charge_limit_soc") or 80)
+        self.minutes_to_full_charge = int(charge.get("minutes_to_full_charge") or 0)
+        self.time_to_full_charge = float(charge.get("time_to_full_charge") or 0.0)
 
         # Charging power in kW
         self.charging_kw = (self.charger_actual_current * self.charger_voltage) / 1000.0

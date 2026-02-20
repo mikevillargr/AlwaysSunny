@@ -36,6 +36,7 @@ export const SAMPLE_STATUS = {
   tesla_charging_kw: 2.9,
   charge_port_connected: true,
   charging_state: 'Charging' as const,
+  minutes_to_full_charge: 180,
   ai_enabled: true,
   ai_status: 'active' as const,
   ai_recommended_amps: 12,

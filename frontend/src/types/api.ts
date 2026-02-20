@@ -93,6 +93,7 @@ export interface StatusResponse {
   tesla_charging_kw: number
   charge_port_connected: boolean
   charging_state: ChargingState
+  minutes_to_full_charge: number
   // AI state
   ai_enabled: boolean
   ai_status: AIStatus

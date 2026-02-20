@@ -14,6 +14,7 @@ interface SessionStatsProps {
   mode: string
   tessieEnabled?: boolean
   chargePortConnected?: boolean
+  minutesToFullCharge?: number
 }
 
 export function SessionStats({
@@ -27,6 +28,7 @@ export function SessionStats({
   mode,
   tessieEnabled = true,
   chargePortConnected = false,
+  minutesToFullCharge = 0,
 }: SessionStatsProps) {
   const solarPct = session?.solar_pct ?? 0
   const gridPct = 100 - solarPct
@@ -133,6 +135,13 @@ export function SessionStats({
           <Typography variant="body1" color="text.secondary">
             → {safeTargetSoc}% target
           </Typography>
+          {minutesToFullCharge > 0 && safeTeslaSoc < safeTargetSoc && (
+            <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+              · {minutesToFullCharge >= 60
+                ? `${Math.floor(minutesToFullCharge / 60)}h ${minutesToFullCharge % 60}m`
+                : `${minutesToFullCharge}m`} remaining
+            </Typography>
+          )}
         </Box>
 
         {/* Custom Progress Bar */}
@@ -289,12 +298,16 @@ export function SessionStats({
               mb: 0.5,
             }}
           >
-            {chargingStrategy === 'solar' ? 'SESSION TIME' : 'DEPARTS IN'}
+            {minutesToFullCharge > 0 && safeTeslaSoc < safeTargetSoc ? 'ETA TO TARGET' : chargingStrategy === 'solar' ? 'SESSION TIME' : 'DEPARTS IN'}
           </Typography>
           <Typography variant="body1" fontWeight="600">
-            {chargingStrategy === 'solar'
-              ? session ? `${session.elapsed_mins}m` : '—'
-              : departureTime ? departureTime : '—'}
+            {minutesToFullCharge > 0 && safeTeslaSoc < safeTargetSoc
+              ? minutesToFullCharge >= 60
+                ? `${Math.floor(minutesToFullCharge / 60)}h ${minutesToFullCharge % 60}m`
+                : `${minutesToFullCharge}m`
+              : chargingStrategy === 'solar'
+                ? session ? `${session.elapsed_mins}m` : '—'
+                : departureTime ? departureTime : '—'}
           </Typography>
         </Grid>
         <Grid item xs={6}>

@@ -46,6 +46,7 @@ class AITestRequest(BaseModel):
         "16:00 | 350 W/m² | 1100W | 30% cloud\n"
         "17:00 | 120 W/m² | 380W  | 40% cloud"
     )
+    minutes_to_full_charge: int = 0
     custom_prompt: Optional[str] = None
 
 
@@ -73,6 +74,7 @@ def _build_test_prompt(body: AITestRequest, grid_remaining: float) -> str:
         session_kwh_added=body.session_kwh_added,
         session_solar_pct=body.session_solar_pct,
         current_time=body.current_time,
+        minutes_to_full_charge=body.minutes_to_full_charge,
     )
 
 

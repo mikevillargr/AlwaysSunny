@@ -267,6 +267,7 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             session_kwh_added=session_kwh_added,
             session_solar_pct=session_solar_pct,
             current_time=current_time,
+            minutes_to_full_charge=state.tesla.minutes_to_full_charge if state.tesla else 0,
         )
 
         # Apply admin AI sensitivity settings if configured
@@ -748,6 +749,7 @@ def build_status_response(state: UserLoopState) -> dict:
         "tesla_charging_kw": tesla.charging_kw if tesla else 0,
         "charge_port_connected": tesla.charge_port_connected if tesla else False,
         "charging_state": tesla.charging_state if tesla else "Disconnected",
+        "minutes_to_full_charge": tesla.minutes_to_full_charge if tesla else 0,
         "ai_enabled": state.ai_enabled,
         "ai_status": state.ai_status,
         "ai_recommended_amps": ai.recommended_amps if ai else 0,

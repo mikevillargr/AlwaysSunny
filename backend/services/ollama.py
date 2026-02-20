@@ -98,6 +98,7 @@ def build_prompt(
     session_kwh_added: float = 0.0,
     session_solar_pct: float = 0.0,
     current_time: str = "",
+    minutes_to_full_charge: int = 0,
 ) -> str:
     """Build the AI prompt with full context for optimization decision."""
     # --- Pre-compute goal-aware metrics ---
@@ -175,19 +176,35 @@ def build_prompt(
 
     # --- Build strategy context ---
     strategy_block = ""
+    # Tesla's native ETA (based on current charge rate)
+    tesla_eta_line = ""
+    if minutes_to_full_charge > 0:
+        eta_h = minutes_to_full_charge // 60
+        eta_m = minutes_to_full_charge % 60
+        tesla_eta_line = f"\nTesla ETA to charge limit at current rate: {eta_h}h {eta_m}m ({minutes_to_full_charge} min)"
+
     if charging_strategy == "departure" and departure_time:
+        # Compare Tesla ETA vs departure window
+        eta_vs_departure = ""
+        if minutes_to_full_charge > 0 and hours_to_departure > 0:
+            departure_mins = hours_to_departure * 60
+            if minutes_to_full_charge <= departure_mins:
+                eta_vs_departure = f"\nTesla ETA vs departure: ON TRACK — finishes {departure_mins - minutes_to_full_charge:.0f} min before departure"
+            else:
+                eta_vs_departure = f"\nTesla ETA vs departure: BEHIND — would finish {minutes_to_full_charge - departure_mins:.0f} min AFTER departure at current rate. Must increase amps."
+
         strategy_block = f"""Mode: DEPARTURE — Ready by {departure_time}
 Current time: {current_time or 'unknown'}
 Hours until departure: {hours_to_departure:.1f}h
 Minimum amps to reach target by departure: {min_amps_for_departure}A
-Feasibility: {departure_feasible}"""
+Feasibility: {departure_feasible}{tesla_eta_line}{eta_vs_departure}"""
     elif charging_strategy == "solar":
         strategy_block = f"""Mode: SOLAR-FIRST — Maximize solar, avoid grid draw
 Current time: {current_time or 'unknown'}
-Can finish with solar before sunset: {solar_can_finish}"""
+Can finish with solar before sunset: {solar_can_finish}{tesla_eta_line}"""
     else:
         strategy_block = f"""Mode: {charging_strategy}
-Current time: {current_time or 'unknown'}"""
+Current time: {current_time or 'unknown'}{tesla_eta_line}"""
 
     # --- Build the prompt ---
     return f"""You are a solar EV charging optimizer for a home in the Philippines.
