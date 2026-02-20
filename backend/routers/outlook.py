@@ -156,11 +156,12 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
     user_id = user["id"]
     state = get_user_state(user_id)
 
-    if not state:
+    if not state or not state.solax:
         return {
-            "text": "Waiting for system data...",
+            "text": "",
             "generated_at": "",
             "cached": False,
+            "pending": True,
         }
 
     now = time.time()

@@ -7,6 +7,7 @@ interface OutlookData {
   text: string
   generated_at: string
   cached: boolean
+  pending?: boolean
 }
 
 const POLL_INTERVAL = 60 * 60 * 1000 // 1 hour
@@ -44,6 +45,8 @@ export function ChargingOutlook() {
   const [expanded, setExpanded] = useState(true)
   const [error, setError] = useState(false)
 
+  const retryRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const fetchOutlook = useCallback(async () => {
     setLoading(true)
     setError(false)
@@ -52,6 +55,10 @@ export function ChargingOutlook() {
       if (resp.ok) {
         const data: OutlookData = await resp.json()
         setOutlook(data)
+        // Retry if backend data isn't ready yet
+        if (data.pending) {
+          retryRef.current = setTimeout(fetchOutlook, 15000)
+        }
       } else {
         setError(true)
       }
@@ -66,7 +73,10 @@ export function ChargingOutlook() {
   useEffect(() => {
     fetchOutlook()
     const interval = setInterval(fetchOutlook, POLL_INTERVAL)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      if (retryRef.current) clearTimeout(retryRef.current)
+    }
   }, [fetchOutlook])
 
   // Brief indicator for collapsed state
