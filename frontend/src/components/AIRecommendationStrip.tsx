@@ -9,6 +9,8 @@ interface AIRecommendationStripProps {
   aiRecommendedAmps: number
   aiConfidence: AIConfidence
   aiReasoning: string
+  tessieEnabled?: boolean
+  chargePortConnected?: boolean
 }
 export function AIRecommendationStrip({
   autoOptimize,
@@ -16,7 +18,10 @@ export function AIRecommendationStrip({
   aiRecommendedAmps,
   aiConfidence,
   aiReasoning,
+  tessieEnabled = true,
+  chargePortConnected = false,
 }: AIRecommendationStripProps) {
+  const aiToggleEnabled = tessieEnabled && chargePortConnected
   return (
     <Box
       sx={{
@@ -184,6 +189,7 @@ export function AIRecommendationStrip({
             <Switch
               checked={autoOptimize}
               onChange={(e) => onAutoOptimizeChange(e.target.checked)}
+              disabled={!aiToggleEnabled}
               sx={{
                 '& .MuiSwitch-switchBase.Mui-checked': {
                   color: '#a855f7',

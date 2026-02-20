@@ -77,6 +77,8 @@ export function Dashboard() {
         aiRecommendedAmps={status.ai_recommended_amps}
         aiConfidence={status.ai_confidence}
         aiReasoning={status.ai_reasoning}
+        tessieEnabled={tessieEnabled}
+        chargePortConnected={status.charge_port_connected}
       />
       <AmperageControl
         autoOptimize={autoOptimize}
