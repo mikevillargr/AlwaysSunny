@@ -181,46 +181,126 @@ export function EnergyFlowPanel({
           </svg>
         </Box>
 
-        {/* Stats: vertical column on right (desktop), 2×2 grid on mobile */}
+        {/* Stats: 4 columns on desktop, 2×2 grid on mobile */}
         <Box
           sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: '1fr' },
-            gap: 0,
-            borderLeft: { xs: 'none', md: '1px solid #2a3f57' },
-            borderTop: { xs: '1px solid #2a3f57', md: 'none' },
-            pl: { xs: 0, md: 3 },
-            ml: { xs: 0, md: 2 },
+            display: {
+              xs: 'grid',
+              md: 'flex',
+            },
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: {
+              xs: 0,
+              md: 0,
+            },
+            borderLeft: {
+              xs: 'none',
+              md: '1px solid #2a3f57',
+            },
+            borderTop: {
+              xs: '1px solid #2a3f57',
+              md: 'none',
+            },
+            pt: {
+              xs: 2,
+              md: 0,
+            },
+            mt: {
+              xs: 1,
+              md: 0,
+            },
+            pl: {
+              xs: 0,
+              md: 4,
+            },
+            ml: {
+              xs: 0,
+              md: 2,
+            },
             flexShrink: 0,
-            minWidth: { md: 120 },
           }}
         >
           {[
-            { label: 'SOLAR', value: fmtComma(solarW), unit: 'W', color: '#f5c518' },
-            { label: 'HOME', value: fmtComma(householdDemandW), unit: 'W', color: '#14b8a6' },
-            { label: 'GRID', value: `${gridImportW >= 0 ? '+' : ''}${fmtComma(Math.abs(gridImportW))}`, unit: 'W', color: '#3b82f6' },
-            { label: 'TESLA', value: tessieEnabled ? fmtComma(teslaW) : '—', unit: tessieEnabled ? 'W' : '', color: teslaColor },
+            {
+              label: 'SOLAR YIELD',
+              value: fmtComma(solarW),
+              unit: 'W',
+              color: '#f5c518',
+            },
+            {
+              label: 'HOME DEMAND',
+              value: fmtComma(householdDemandW),
+              unit: 'W',
+              color: '#14b8a6',
+            },
+            {
+              label: 'GRID IMPORT',
+              value: `${gridImportW >= 0 ? '+' : ''}${fmtComma(Math.abs(gridImportW))}`,
+              unit: 'W',
+              color: '#3b82f6',
+            },
+            {
+              label: 'CHARGING',
+              value: tessieEnabled ? fmtComma(teslaW) : '—',
+              unit: tessieEnabled ? 'W' : '',
+              color: teslaColor,
+            },
           ].map((stat, i) => (
             <Box
               key={i}
               sx={{
-                px: { xs: 1.5, md: 0 },
-                py: { xs: 1.5, md: 1.5 },
-                borderRight: { xs: i % 2 === 0 ? '1px solid #2a3f57' : 'none', md: 'none' },
-                borderBottom: { xs: i < 2 ? '1px solid #2a3f57' : 'none', md: i < 3 ? '1px solid #2a3f57' : 'none' },
-                textAlign: { xs: 'center', md: 'left' },
+                px: {
+                  xs: 1.5,
+                  md: 3,
+                },
+                py: {
+                  xs: 1.5,
+                  md: 0,
+                },
+                borderRight: {
+                  xs: i % 2 === 0 ? '1px solid #2a3f57' : 'none',
+                  md: i < 3 ? '1px solid #2a3f57' : 'none',
+                },
+                borderBottom: {
+                  xs: i < 2 ? '1px solid #2a3f57' : 'none',
+                  md: 'none',
+                },
+                textAlign: 'center',
+                minWidth: {
+                  xs: 0,
+                  md: 90,
+                },
               }}
             >
               <Typography
-                variant="caption" color="text.secondary"
-                sx={{ textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', mb: 0.5, fontSize: { xs: '0.6rem', md: '0.65rem' } }}
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.8,
+                  display: 'block',
+                  mb: 1,
+                  fontSize: {
+                    xs: '0.6rem',
+                    md: undefined,
+                  },
+                }}
               >
                 {stat.label}
               </Typography>
-              <Typography variant="h6" fontWeight="700" color={stat.color} sx={{ lineHeight: 1 }}>
+              <Typography
+                variant="h5"
+                fontWeight="700"
+                color={stat.color}
+                sx={{
+                  lineHeight: 1,
+                }}
+              >
                 {stat.value}
               </Typography>
-              <Typography variant="caption" color="text.secondary">{stat.unit}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {stat.unit}
+              </Typography>
             </Box>
           ))}
         </Box>
