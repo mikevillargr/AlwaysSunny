@@ -327,12 +327,26 @@ async def _control_tick(user_id: str) -> None:
         logger.debug(f"[{state.user_id[:8]}] Location unknown — assuming home")
 
     # Daily grid budget tracking — uses consumeenergy (cumulative all-time kWh)
-    # Snapshot at start of each day; daily_used = current - snapshot
+    # Snapshot persisted to DB so it survives backend restarts.
     today_str = datetime.now().strftime("%Y-%m-%d")
+
+    # Load persisted snapshot if in-memory state is empty (e.g. after restart)
+    if not state.daily_grid_date:
+        saved_date = state.settings.get("_daily_grid_date", "")
+        saved_start = state.settings.get("_daily_grid_start_kwh", "")
+        if saved_date == today_str and saved_start:
+            state.daily_grid_date = saved_date
+            state.daily_grid_start_kwh = float(saved_start)
+            logger.info(f"[{state.user_id[:8]}] Restored daily grid snapshot from DB: {state.daily_grid_start_kwh:.2f} kWh")
+
+    # New day (or first ever run) — take a fresh snapshot
     if state.daily_grid_date != today_str:
         state.daily_grid_start_kwh = solax.consume_energy_kwh
         state.daily_grid_date = today_str
-        logger.info(f"[{state.user_id[:8]}] Daily grid reset: start={solax.consume_energy_kwh:.2f} kWh")
+        # Persist to DB
+        upsert_user_setting(user_id, "_daily_grid_date", today_str)
+        upsert_user_setting(user_id, "_daily_grid_start_kwh", str(solax.consume_energy_kwh))
+        logger.info(f"[{state.user_id[:8]}] Daily grid reset: start={solax.consume_energy_kwh:.2f} kWh (persisted)")
 
     daily_grid_used = max(0, solax.consume_energy_kwh - state.daily_grid_start_kwh)
     grid_budget = float(state.settings.get("daily_grid_budget_kwh", 0))
