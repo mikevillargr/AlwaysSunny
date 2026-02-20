@@ -152,8 +152,8 @@ async def generate_outlook(state) -> tuple[str, str]:
 
 
 @router.get("/outlook")
-async def get_outlook(user: dict = Depends(get_current_user)):
-    """Return the cached charging outlook, regenerating if stale (>1 hour)."""
+async def get_outlook(user: dict = Depends(get_current_user), force: bool = False):
+    """Return the cached charging outlook, regenerating if stale (>1 hour) or forced."""
     user_id = user["id"]
     state = get_user_state(user_id)
 
@@ -165,8 +165,8 @@ async def get_outlook(user: dict = Depends(get_current_user)):
         }
 
     now = time.time()
-    # Return cached if fresh
-    if state.outlook_text and (now - state.last_outlook_fetch) < OUTLOOK_CACHE_SECS:
+    # Return cached if fresh and not forced
+    if not force and state.outlook_text and (now - state.last_outlook_fetch) < OUTLOOK_CACHE_SECS:
         return {
             "text": state.outlook_text,
             "generated_at": state.outlook_generated_at,

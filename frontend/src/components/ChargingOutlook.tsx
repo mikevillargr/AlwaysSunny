@@ -164,7 +164,16 @@ export function ChargingOutlook() {
               component="span"
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation()
-                fetchOutlook()
+                ;(async () => {
+                  setLoading(true)
+                  setError(false)
+                  try {
+                    const resp = await apiFetch('/api/outlook?force=true')
+                    if (resp.ok) setOutlook(await resp.json())
+                    else setError(true)
+                  } catch { setError(true) }
+                  finally { setLoading(false) }
+                })()
               }}
               sx={{
                 display: 'flex',
