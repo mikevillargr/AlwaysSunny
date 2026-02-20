@@ -10,8 +10,7 @@ from fastapi import APIRouter, Depends
 
 from middleware.auth import get_current_user
 from scheduler.control_loop import get_user_state
-from config import get_settings
-from services.ollama import call_ollama
+from services.ollama import call_ollama_text
 
 logger = logging.getLogger(__name__)
 
@@ -21,27 +20,16 @@ OUTLOOK_CACHE_SECS = 3600  # Refresh at most once per hour
 
 
 def _build_outlook_prompt(state) -> str:
-    """Build a lightweight prompt for the charging outlook narrative."""
+    """Build a prompt grounded in actual inverter data + forecast."""
     forecast = state.forecast
     solax = state.solax
     tesla = state.tesla
     settings = state.settings
 
-    if not forecast or not solax:
+    if not solax:
         return ""
 
-    irradiance_curve = forecast.build_irradiance_curve_for_ai()
-    hours_until_sunset = forecast.hours_until_sunset()
-    solar_w = solax.solar_w
-    household_w = solax.household_demand_w
-    surplus_w = max(0, solar_w - household_w)
-    tesla_soc = tesla.battery_level if tesla else 0
-    target_soc = int(settings.get("target_soc", 80))
-    soc_gap = max(0, target_soc - tesla_soc)
-    kwh_needed = (soc_gap / 100.0) * 75.0
-    charging_strategy = settings.get("charging_strategy", "departure")
-    departure_time = settings.get("departure_time", "")
-
+    # Current time
     try:
         from zoneinfo import ZoneInfo
     except ImportError:
@@ -52,67 +40,109 @@ def _build_outlook_prompt(state) -> str:
     except Exception:
         current_time = datetime.now().strftime("%H:%M")
 
+    # Actual inverter readings
+    solar_w = solax.solar_w
+    household_w = solax.household_demand_w
+    grid_import_w = solax.grid_import_w
+    surplus_w = max(0, solar_w - household_w)
+
+    # Tesla state
+    tesla_soc = tesla.battery_level if tesla else 0
+    target_soc = int(settings.get("target_soc", 80))
+    soc_gap = max(0, target_soc - tesla_soc)
+    kwh_needed = (soc_gap / 100.0) * 75.0
+    charging_amps = tesla.charger_actual_current if tesla else 0
+    charging_state = tesla.charging_state if tesla else "Unknown"
+
+    # Strategy
+    charging_strategy = settings.get("charging_strategy", "departure")
+    departure_time = settings.get("departure_time", "")
+
+    # Forecast data
+    hours_until_sunset = forecast.hours_until_sunset() if forecast else 0
+    irradiance_curve = forecast.build_irradiance_curve_for_ai() if forecast else "No forecast data."
+    is_night = hours_until_sunset <= 0 or solar_w < 10
+
+    # Situation assessment (pre-computed so the AI doesn't hallucinate)
+    if is_night:
+        situation = f"""SITUATION: It is nighttime (or past sunset). Solar yield is {solar_w:.0f}W — effectively zero.
+Any charging right now WILL draw entirely from the grid.
+Grid is currently importing {grid_import_w:.0f}W for household use alone."""
+    elif surplus_w < 700:
+        situation = f"""SITUATION: Solar yield is low at {solar_w:.0f}W with {household_w:.0f}W household demand.
+Surplus of only {surplus_w:.0f}W — not enough to charge (minimum ~1,200W needed for 5A).
+Any charging right now would draw mostly from the grid."""
+    elif surplus_w < 1200:
+        situation = f"""SITUATION: Solar yield is {solar_w:.0f}W with {household_w:.0f}W household demand.
+Surplus of {surplus_w:.0f}W — borderline. Can sustain 5A with minor grid draw (~{1200 - surplus_w:.0f}W from grid)."""
+    else:
+        max_solar_amps = min(32, int(surplus_w / 240))
+        situation = f"""SITUATION: Good solar conditions. Yield is {solar_w:.0f}W with {household_w:.0f}W household demand.
+Surplus of {surplus_w:.0f}W supports up to {max_solar_amps}A charging without grid draw."""
+
     strategy_line = ""
     if charging_strategy == "departure" and departure_time:
-        strategy_line = f"Strategy: Ready by {departure_time} departure"
+        strategy_line = f"Strategy: Ready by {departure_time} departure. Grid draw is acceptable to meet deadline."
     elif charging_strategy == "solar":
-        strategy_line = "Strategy: Solar-first (minimize grid draw)"
+        strategy_line = "Strategy: Solar-first. Grid draw should be avoided."
 
-    return f"""You are a solar charging assistant. Write a brief 2-3 sentence charging outlook for the next few hours.
-This is informational only — do NOT recommend specific amps. Just describe what to expect.
+    return f"""Write a 2-3 sentence plain text charging outlook. Be honest and direct about current conditions.
 
 Current time: {current_time}
-Current solar: {solar_w:.0f}W | Household: {household_w:.0f}W | Surplus: {surplus_w:.0f}W
-Tesla SoC: {tesla_soc}% → Target: {target_soc}% ({kwh_needed:.1f} kWh needed)
-{strategy_line}
-Hours of sun left: {hours_until_sunset:.1f}h
+{situation}
 
-Solar forecast (remaining hours):
+ACTUAL READINGS (from inverter right now):
+- Solar: {solar_w:.0f}W | Household: {household_w:.0f}W | Grid import: {grid_import_w:.0f}W
+- Tesla: {tesla_soc}% → {target_soc}% target ({kwh_needed:.1f} kWh needed)
+- Currently: {charging_state} at {charging_amps}A
+{strategy_line}
+
+FORECAST (next hours):
+Hours of sun left: {hours_until_sunset:.1f}h
 {irradiance_curve}
 
-Write a natural, conversational summary of:
-1. What solar conditions look like for the next 2-3 hours
-2. Whether charging pace is likely to increase, hold, or decrease
-3. Any notable transitions (cloud buildup, peak ending, sunset approaching)
-
-Keep it to 2-3 sentences. Be specific with times and numbers. No JSON — just plain text.
-Example: "Strong solar expected until 3pm with peak around 850 W/m² at 1pm. Should sustain 12-16A charging for the next 2 hours. Cloud cover builds after 3pm — expect solar to drop below charging threshold by 4:30pm."
-"""
+RULES:
+- Be HONEST. If it's night or there's no solar, say so clearly. Do not pretend solar is available.
+- If charging now means grid draw, say that directly.
+- Reference specific numbers from the actual readings above.
+- Mention what to expect in the next 2-3 hours based on the forecast.
+- 2-3 sentences max. Plain conversational English. NO JSON, NO code, NO brackets, NO formatting."""
 
 
 async def generate_outlook(state) -> tuple[str, str]:
-    """Generate the outlook text via Ollama. Returns (text, generated_at)."""
+    """Generate the outlook text via Ollama plain text call. Returns (text, generated_at)."""
     prompt = _build_outlook_prompt(state)
     if not prompt:
         return "No forecast data available yet.", ""
 
     try:
-        settings = get_settings()
         ai_model = state.settings.get("ai_model") or None
-        rec = await call_ollama(
+        raw_text = await call_ollama_text(
             prompt,
-            trigger_reason="outlook",
             max_retries=2,
             model_override=ai_model,
             max_tokens_override=200,
         )
-        # The response comes as JSON with reasoning field, but we asked for plain text
-        # Try to extract just the text
-        raw_text = rec.raw.get("response", "").strip()
-        # If it's JSON (model ignored our instruction), extract reasoning
+        # Extra cleanup: strip any JSON artifacts the model might still produce
+        import json
         if raw_text.startswith("{"):
-            import json
             try:
                 parsed = json.loads(raw_text)
-                raw_text = parsed.get("reasoning", raw_text)
+                # Try common keys
+                for key in ("text", "reasoning", "outlook", "summary"):
+                    if key in parsed and isinstance(parsed[key], str):
+                        raw_text = parsed[key]
+                        break
+                else:
+                    # Just grab the first string value
+                    for v in parsed.values():
+                        if isinstance(v, str) and len(v) > 20:
+                            raw_text = v
+                            break
             except json.JSONDecodeError:
                 pass
-        # Strip any markdown fences
-        if raw_text.startswith("```"):
-            raw_text = raw_text.split("\n", 1)[-1]
-        if raw_text.endswith("```"):
-            raw_text = raw_text.rsplit("```", 1)[0]
-        raw_text = raw_text.strip()
+        # Remove any remaining brackets/braces
+        raw_text = raw_text.strip().strip("{}[]").strip()
 
         generated_at = datetime.now().strftime("%H:%M")
         return raw_text, generated_at

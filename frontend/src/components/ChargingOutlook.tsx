@@ -11,6 +11,33 @@ interface OutlookData {
 
 const POLL_INTERVAL = 60 * 60 * 1000 // 1 hour
 
+/** Strip any JSON/bracket artifacts from the outlook text */
+function cleanText(raw: string): string {
+  let text = raw.trim()
+  // If it looks like JSON, try to extract a string value
+  if (text.startsWith('{') || text.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(text)
+      if (typeof parsed === 'string') return parsed
+      if (typeof parsed === 'object' && parsed !== null) {
+        // Grab the first long string value
+        for (const v of Object.values(parsed)) {
+          if (typeof v === 'string' && v.length > 20) return v
+        }
+      }
+    } catch {
+      // Not valid JSON, strip brackets
+    }
+  }
+  // Strip stray brackets/braces
+  text = text.replace(/^\{|\}$|^\[|\]$/g, '').trim()
+  // Strip quotes wrapping the whole string
+  if (text.startsWith('"') && text.endsWith('"')) {
+    text = text.slice(1, -1)
+  }
+  return text
+}
+
 export function ChargingOutlook() {
   const [outlook, setOutlook] = useState<OutlookData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -47,11 +74,8 @@ export function ChargingOutlook() {
     if (loading && !outlook) return 'Loading...'
     if (error) return 'Unavailable'
     if (!outlook?.text) return 'No data'
-    // First ~60 chars of the outlook
-    const preview = outlook.text.length > 60
-      ? outlook.text.substring(0, 60).trim() + '…'
-      : outlook.text
-    return preview
+    const clean = cleanText(outlook.text)
+    return clean.length > 80 ? clean.substring(0, 80).trim() + '…' : clean
   }
 
   return (
@@ -80,7 +104,7 @@ export function ChargingOutlook() {
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {outlook?.generated_at && (
-            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>
+            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem' }}>
               {outlook.generated_at}
             </Typography>
           )}
@@ -99,7 +123,7 @@ export function ChargingOutlook() {
           color="text.secondary"
           sx={{
             mt: 0.75,
-            fontSize: '0.8rem',
+            fontSize: '0.875rem',
             fontStyle: 'italic',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -114,26 +138,26 @@ export function ChargingOutlook() {
       <Collapse in={expanded}>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #2a3f57' }}>
           {error ? (
-            <Typography variant="body2" color="error" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant="body2" color="error" sx={{ fontSize: '0.9rem' }}>
               Unable to generate outlook — AI service unavailable.
             </Typography>
           ) : outlook?.text ? (
             <Typography
-              variant="body2"
+              variant="body1"
               color="text.secondary"
-              sx={{ fontSize: '0.85rem', lineHeight: 1.6 }}
+              sx={{ fontSize: '0.95rem', lineHeight: 1.7 }}
             >
-              {outlook.text}
+              {cleanText(outlook.text)}
             </Typography>
           ) : (
-            <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.9rem' }}>
               Waiting for forecast data...
             </Typography>
           )}
           <Box
             sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5 }}
           >
-            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>
+            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem' }}>
               AI-generated · Updates hourly · Does not control charging
             </Typography>
             <Box
@@ -149,7 +173,7 @@ export function ChargingOutlook() {
                 cursor: 'pointer',
                 color: '#4a6382',
                 '&:hover': { color: '#a855f7' },
-                fontSize: '0.65rem',
+                fontSize: '0.75rem',
               }}
             >
               <RefreshCw size={10} />

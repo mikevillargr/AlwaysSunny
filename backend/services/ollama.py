@@ -361,6 +361,63 @@ async def call_ollama(
     raise last_error or Exception("Ollama call failed after all retries")
 
 
+async def call_ollama_text(
+    prompt: str,
+    max_retries: int = 2,
+    model_override: str | None = None,
+    max_tokens_override: int | None = None,
+) -> str:
+    """Call Ollama API and return raw text response (no JSON format constraint).
+
+    Used for free-form text generation like the charging outlook.
+    """
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+    settings = get_settings()
+    model = model_override or settings.ollama_model
+    num_predict = max_tokens_override or 200
+
+    last_error: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                resp = await client.post(
+                    f"{settings.ollama_host}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.3,
+                            "num_predict": num_predict,
+                        },
+                    },
+                )
+                resp.raise_for_status()
+                raw = resp.json().get("response", "").strip()
+                # Clean up any stray markdown fences
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[-1]
+                if raw.endswith("```"):
+                    raw = raw.rsplit("```", 1)[0]
+                return raw.strip()
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError) as e:
+            last_error = e
+            if attempt < max_retries:
+                await asyncio.sleep(2 ** attempt)
+            else:
+                logger.error(f"Ollama text call failed after {max_retries} attempts: {e}")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500 and attempt < max_retries:
+                await asyncio.sleep(2 ** attempt)
+                last_error = e
+            else:
+                raise
+
+    raise last_error or Exception("Ollama text call failed after all retries")
+
+
 async def test_ollama_connection() -> tuple[bool, str]:
     """Test Ollama connectivity and model availability."""
     settings = get_settings()
