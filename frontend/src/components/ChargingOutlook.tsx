@@ -41,7 +41,7 @@ function cleanText(raw: string): string {
 export function ChargingOutlook() {
   const [outlook, setOutlook] = useState<OutlookData | null>(null)
   const [loading, setLoading] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const [error, setError] = useState(false)
 
   const fetchOutlook = useCallback(async () => {
