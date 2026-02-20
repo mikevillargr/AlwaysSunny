@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Card,
@@ -14,8 +14,11 @@ import {
   FormControl,
   Fade,
   Chip,
+  Alert,
+  CircularProgress,
 } from '@mui/material'
-import { Check, Globe } from 'lucide-react'
+import { Check, Globe, Sun, Car, Bot, Send } from 'lucide-react'
+import { apiFetch } from '../lib/api'
 export function Settings() {
   const [currency, setCurrency] = useState('PHP')
   const [unit, setUnit] = useState('kWh')
@@ -79,6 +82,70 @@ export function Settings() {
     })
     setNotifSaved(true)
     setTimeout(() => setNotifSaved(false), 2500)
+  }
+
+  // API Credentials state
+  const [solaxTokenId, setSolaxTokenId] = useState('202508151014313779537711')
+  const [solaxDongleSn, setSolaxDongleSn] = useState('SS7ZQUQNRA')
+  const [tessieApiKey, setTessieApiKey] = useState('')
+  const [tessieVin, setTessieVin] = useState('')
+  const [telegramBotToken, setTelegramBotToken] = useState('')
+  const [telegramChatId, setTelegramChatId] = useState('')
+
+  const [credsSaving, setCredsSaving] = useState(false)
+  const [credsSaved, setCredsSaved] = useState(false)
+  const [credsError, setCredsError] = useState<string | null>(null)
+  const [credsLoaded, setCredsLoaded] = useState(false)
+
+  // Load existing credentials on mount
+  useEffect(() => {
+    async function loadCreds() {
+      try {
+        const res = await apiFetch('/api/credentials')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.solax_token_id) setSolaxTokenId(data.solax_token_id)
+          if (data.solax_dongle_sn) setSolaxDongleSn(data.solax_dongle_sn)
+          if (data.tessie_api_key && !data.tessie_api_key.startsWith('•'))
+            setTessieApiKey(data.tessie_api_key)
+          if (data.tessie_vin) setTessieVin(data.tessie_vin)
+          if (data.telegram_bot_token && !data.telegram_bot_token.startsWith('•'))
+            setTelegramBotToken(data.telegram_bot_token)
+          if (data.telegram_chat_id) setTelegramChatId(data.telegram_chat_id)
+        }
+      } catch (e) {
+        console.warn('[Settings] Failed to load credentials:', e)
+      }
+      setCredsLoaded(true)
+    }
+    loadCreds()
+  }, [])
+
+  const handleSaveCredentials = async () => {
+    setCredsSaving(true)
+    setCredsError(null)
+    try {
+      const body: Record<string, string> = {}
+      if (solaxTokenId) body.solax_token_id = solaxTokenId
+      if (solaxDongleSn) body.solax_dongle_sn = solaxDongleSn
+      if (tessieApiKey && !tessieApiKey.startsWith('•')) body.tessie_api_key = tessieApiKey
+      if (tessieVin) body.tessie_vin = tessieVin
+      if (telegramBotToken && !telegramBotToken.startsWith('•'))
+        body.telegram_bot_token = telegramBotToken
+      if (telegramChatId) body.telegram_chat_id = telegramChatId
+
+      const res = await apiFetch('/api/credentials', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(`Failed to save: ${res.status}`)
+      setCredsSaved(true)
+      setTimeout(() => setCredsSaved(false), 3000)
+    } catch (e) {
+      setCredsError(e instanceof Error ? e.message : 'Failed to save credentials')
+    } finally {
+      setCredsSaving(false)
+    }
   }
   return (
     <Box
@@ -454,161 +521,159 @@ export function Settings() {
         </Box>
       </Card>
 
-      {/* API Connections */}
+      {/* API Credentials */}
       <Card
         sx={{
           p: 3,
           mb: 3,
         }}
       >
-        <Typography
-          variant="h6"
-          fontWeight="600"
+        <Box
           sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             mb: 3,
           }}
         >
-          API Connections
-        </Typography>
-
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}
-        >
-          {[
-            {
-              name: 'Solax Cloud',
-              status: 'Connected',
-              time: 'last data 45s ago',
-            },
-            {
-              name: 'Tessie (Tesla)',
-              status: 'Connected',
-              time: 'Tesla plugged in',
-            },
-            {
-              name: 'Ollama AI',
-              status: 'Connected',
-              time: 'llama3.1:8b',
-            },
-            {
-              name: 'Open-Meteo',
-              status: 'Active',
-              time: 'forecast updated 12m ago',
-            },
-          ].map((api, i, arr) => (
-            <Box key={i}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Box>
-                  <Typography variant="subtitle2">{api.name}</Typography>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        bgcolor: '#22c55e',
-                      }}
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      {api.status} · {api.time}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Button size="small" variant="outlined">
-                  Reconnect
-                </Button>
-              </Box>
-              {i < arr.length - 1 && (
-                <Divider
-                  sx={{
-                    mt: 2,
-                  }}
-                />
-              )}
-            </Box>
-          ))}
+          <Typography variant="h6" fontWeight="600">
+            API Connections
+          </Typography>
+          <Fade in={credsSaved}>
+            <Chip
+              icon={<Check size={14} />}
+              label="Saved"
+              size="small"
+              sx={{
+                bgcolor: 'rgba(34,197,94,0.12)',
+                color: '#22c55e',
+                border: '1px solid rgba(34,197,94,0.3)',
+                fontWeight: 600,
+                '& .MuiChip-icon': {
+                  color: '#22c55e',
+                },
+              }}
+            />
+          </Fade>
         </Box>
-      </Card>
 
-      {/* Tessie API Key */}
-      <Card
-        sx={{
-          p: 3,
-        }}
-      >
-        <Typography
-          variant="h6"
-          fontWeight="600"
-          sx={{
-            mb: 1,
-          }}
-        >
-          Tessie API Key
-        </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          display="block"
-          sx={{
-            mb: 2,
-          }}
-        >
-          Required to read Tesla state and control charging via Tessie.
-        </Typography>
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            alignItems: 'center',
-          }}
-        >
-          <TextField
-            label="API Key"
-            type="password"
-            placeholder="tss_••••••••••••••••"
-            fullWidth
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                fontFamily: 'monospace',
-              },
-            }}
-          />
+        {credsError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {credsError}
+          </Alert>
+        )}
+
+        {/* Solax Cloud */}
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Sun size={16} color="#f5c518" />
+            <Typography variant="subtitle1" fontWeight="600">
+              Solax Cloud
+            </Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+            Connects to your solar inverter for real-time energy data. Get credentials from solaxcloud.com.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <TextField
+              label="Token ID"
+              value={solaxTokenId}
+              onChange={(e) => setSolaxTokenId(e.target.value)}
+              placeholder="Your SolaxCloud API token"
+              sx={{ flex: 1, minWidth: 240, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            />
+            <TextField
+              label="Dongle SN (Registration No.)"
+              value={solaxDongleSn}
+              onChange={(e) => setSolaxDongleSn(e.target.value)}
+              placeholder="WiFi dongle registration number"
+              sx={{ flex: 1, minWidth: 200, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            />
+          </Box>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* Tessie (Tesla) */}
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Car size={16} color="#3b82f6" />
+            <Typography variant="subtitle1" fontWeight="600">
+              Tessie (Tesla)
+            </Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+            Required to read Tesla state and control charging. Get your API key at tessie.com → Settings → API.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <TextField
+              label="API Key"
+              type="password"
+              value={tessieApiKey}
+              onChange={(e) => setTessieApiKey(e.target.value)}
+              placeholder="tss_••••••••••••••••"
+              sx={{ flex: 1, minWidth: 240, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            />
+            <TextField
+              label="Tesla VIN"
+              value={tessieVin}
+              onChange={(e) => setTessieVin(e.target.value)}
+              placeholder="5YJ3E1EA1NF000000"
+              sx={{ flex: 1, minWidth: 200, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            />
+          </Box>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* Telegram (Optional) */}
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Send size={16} color="#8da4be" />
+            <Typography variant="subtitle1" fontWeight="600">
+              Telegram Notifications
+            </Typography>
+            <Chip label="Optional" size="small" sx={{ fontSize: '0.65rem', height: 20, bgcolor: 'rgba(255,255,255,0.05)' }} />
+          </Box>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+            Get push notifications for grid budget, session complete, and AI events. Create a bot via @BotFather on Telegram.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <TextField
+              label="Bot Token"
+              type="password"
+              value={telegramBotToken}
+              onChange={(e) => setTelegramBotToken(e.target.value)}
+              placeholder="123456:ABC-DEF..."
+              sx={{ flex: 1, minWidth: 240, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            />
+            <TextField
+              label="Chat ID"
+              value={telegramChatId}
+              onChange={(e) => setTelegramChatId(e.target.value)}
+              placeholder="123456789"
+              sx={{ width: 160, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            />
+          </Box>
+        </Box>
+
+        {/* Save button */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button
             variant="contained"
-            color="primary"
+            onClick={handleSaveCredentials}
+            disabled={credsSaving}
             sx={{
-              whiteSpace: 'nowrap',
+              px: 4,
             }}
           >
-            Save Key
+            {credsSaving ? (
+              <CircularProgress size={20} sx={{ color: '#0b1929' }} />
+            ) : (
+              'Save All Credentials'
+            )}
           </Button>
         </Box>
-        <Typography
-          variant="caption"
-          sx={{
-            color: '#4a6382',
-            display: 'block',
-            mt: 1,
-          }}
-        >
-          Get your key at tessie.com/settings → API
-        </Typography>
       </Card>
     </Box>
   )
