@@ -16,8 +16,9 @@ router = APIRouter()
 DEFAULTS = {
     "target_soc": "80",
     "default_charging_amps": "8",
-    "daily_grid_budget_kwh": "5.0",
-    "max_grid_import_w": "500",
+    "daily_grid_budget_kwh": "25.0",
+    "max_grid_import_w": "7000",
+    "tessie_enabled": "true",
     "meralco_rate": "10.83",
     "meralco_rate_updated_at": "",
     "home_lat": "",
@@ -68,6 +69,7 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
         charging_strategy=merged.get("charging_strategy", "departure"),
         departure_time=merged.get("departure_time") or None,
         onboarding_complete=_parse_bool(merged.get("onboarding_complete", "false")),
+        tessie_enabled=_parse_bool(merged.get("tessie_enabled", "true")),
     )
 
 

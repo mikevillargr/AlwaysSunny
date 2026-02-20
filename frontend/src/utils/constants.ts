@@ -44,6 +44,9 @@ export const SAMPLE_STATUS = {
   ai_trigger_reason: 'scheduled' as const,
   ai_last_updated_secs: 120,
   target_soc: 80,
+  tessie_enabled: true,
+  charging_strategy: 'departure',
+  departure_time: '',
   session: {
     started_at: '2026-02-20T09:14:00',
     elapsed_mins: 84,

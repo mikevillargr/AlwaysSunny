@@ -9,6 +9,9 @@ interface SessionStatsProps {
   targetSoc: number
   teslaChargingAmps: number
   teslaChargingKw: number
+  chargingStrategy: string
+  departureTime: string
+  mode: string
 }
 
 export function SessionStats({
@@ -17,6 +20,9 @@ export function SessionStats({
   targetSoc,
   teslaChargingAmps,
   teslaChargingKw,
+  chargingStrategy,
+  departureTime,
+  mode,
 }: SessionStatsProps) {
   const solarPct = session?.solar_pct ?? 0
   const gridPct = 100 - solarPct
@@ -166,16 +172,26 @@ export function SessionStats({
           border: '1px solid rgba(34, 197, 94, 0.15)',
         }}
       >
-        <CheckCircle
-          size={18}
-          color="#22c55e"
-          style={{
-            marginTop: 2,
-          }}
-        />
+        {safeTeslaSoc >= safeTargetSoc ? (
+          <CheckCircle size={18} color="#22c55e" style={{ marginTop: 2 }} />
+        ) : mode.includes('Urgent') || mode.includes('Passed') ? (
+          <AlertCircle size={18} color="#f59e0b" style={{ marginTop: 2 }} />
+        ) : (
+          <CheckCircle size={18} color="#22c55e" style={{ marginTop: 2 }} />
+        )}
         <Box>
           <Typography variant="body2" fontWeight="600" color="text.primary">
-            {safeTeslaSoc >= safeTargetSoc ? 'Target SoC reached!' : 'Charging in progress'}
+            {safeTeslaSoc >= safeTargetSoc
+              ? 'Target SoC reached!'
+              : mode.includes('Waiting')
+                ? 'Waiting for solar surplus'
+                : mode.includes('Urgent')
+                  ? 'May not reach target by departure'
+                  : mode.includes('Passed')
+                    ? 'Departure passed — charging at max'
+                    : chargingStrategy === 'solar'
+                      ? 'Maximizing solar efficiency'
+                      : 'Charging in progress'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {safeTeslaSoc >= safeTargetSoc
@@ -211,10 +227,12 @@ export function SessionStats({
               mb: 0.5,
             }}
           >
-            DEPARTS IN
+            {chargingStrategy === 'solar' ? 'SESSION TIME' : 'DEPARTS IN'}
           </Typography>
           <Typography variant="body1" fontWeight="600">
-            {session ? `${session.elapsed_mins}m` : '—'}
+            {chargingStrategy === 'solar'
+              ? session ? `${session.elapsed_mins}m` : '—'
+              : departureTime ? departureTime : '—'}
           </Typography>
         </Grid>
         <Grid item xs={6}>

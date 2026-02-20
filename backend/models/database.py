@@ -112,13 +112,14 @@ class SettingsUpdate(BaseModel):
     notif_rate_reminder: Optional[bool] = None
     charging_strategy: Optional[str] = None
     departure_time: Optional[str] = None
+    tessie_enabled: Optional[bool] = None
 
 
 class SettingsResponse(BaseModel):
     target_soc: int = 80
     default_charging_amps: int = 8
-    daily_grid_budget_kwh: float = 5.0
-    max_grid_import_w: float = 500
+    daily_grid_budget_kwh: float = 25.0
+    max_grid_import_w: float = 7000
     meralco_rate: Optional[float] = 10.83
     meralco_rate_updated_at: Optional[str] = None
     home_lat: Optional[float] = None
@@ -132,6 +133,7 @@ class SettingsResponse(BaseModel):
     charging_strategy: str = "departure"
     departure_time: Optional[str] = None
     onboarding_complete: bool = False
+    tessie_enabled: bool = True
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import React from 'react'
-import { Box, Typography, Chip } from '@mui/material'
-import { Car } from 'lucide-react'
+import { Box, Typography, Chip, Switch } from '@mui/material'
+import { Car, Power } from 'lucide-react'
 import type { ChargerStatus, ChargingState, Mode } from '../types/api'
 
 interface StatusBarProps {
@@ -10,6 +10,8 @@ interface StatusBarProps {
   chargePortConnected: boolean
   teslaSoc: number
   solaxDataAgeSecs: number
+  tessieEnabled: boolean
+  onTessieToggle: (enabled: boolean) => void
 }
 
 function getStatusDisplay(props: StatusBarProps) {
@@ -34,6 +36,9 @@ function getStatusDisplay(props: StatusBarProps) {
 
 export function StatusBar(props: StatusBarProps) {
   const { label, color, pulse } = getStatusDisplay(props)
+  const tessieColor = props.tessieEnabled ? '#22c55e' : '#ef4444'
+  const tessieLabel = props.tessieEnabled ? 'Tessie Connected' : 'Tessie Disconnected'
+
   return (
     <Box
       sx={{
@@ -46,7 +51,53 @@ export function StatusBar(props: StatusBarProps) {
         gap: 2,
       }}
     >
-      {/* Tesla Connection Status */}
+      {/* Tessie Connection Kill Switch */}
+      <Chip
+        icon={
+          <Power
+            size={14}
+            color={tessieColor}
+            style={{ marginLeft: 8 }}
+          />
+        }
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box
+              sx={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                bgcolor: tessieColor,
+                boxShadow: props.tessieEnabled ? `0 0 8px ${tessieColor}` : 'none',
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" fontWeight="600" sx={{ letterSpacing: 0.5 }}>
+              {tessieLabel}
+            </Typography>
+            <Switch
+              size="small"
+              checked={props.tessieEnabled}
+              onChange={(_, checked) => props.onTessieToggle(checked)}
+              sx={{
+                ml: 0.5,
+                '& .MuiSwitch-switchBase.Mui-checked': { color: '#22c55e' },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#22c55e' },
+              }}
+            />
+          </Box>
+        }
+        sx={{
+          bgcolor: `${tessieColor}1a`,
+          border: '1px solid',
+          borderColor: `${tessieColor}4d`,
+          color: tessieColor,
+          height: 36,
+          px: 1,
+        }}
+      />
+
+      {/* Tesla Charging Status */}
       <Chip
         icon={
           <Car

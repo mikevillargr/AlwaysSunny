@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { Grid, Box } from '@mui/material'
 import { StatusBar } from '../components/StatusBar'
 import { EnergyFlowPanel } from '../components/EnergyFlowPanel'
@@ -14,6 +14,15 @@ import { apiFetch } from '../lib/api'
 export function Dashboard() {
   const { status } = useStatus()
   const [autoOptimize, setAutoOptimize] = useState(status.ai_enabled)
+  const [tessieEnabled, setTessieEnabled] = useState(status.tessie_enabled)
+
+  // Sync local state with live status on refresh
+  useEffect(() => {
+    setAutoOptimize(status.ai_enabled)
+  }, [status.ai_enabled])
+  useEffect(() => {
+    setTessieEnabled(status.tessie_enabled)
+  }, [status.tessie_enabled])
 
   const handleAutoOptimizeChange = useCallback(async (value: boolean) => {
     setAutoOptimize(value)
@@ -25,6 +34,19 @@ export function Dashboard() {
     } catch (e) {
       console.warn('[Dashboard] Failed to toggle AI:', e)
       setAutoOptimize(!value)
+    }
+  }, [])
+
+  const handleTessieToggle = useCallback(async (value: boolean) => {
+    setTessieEnabled(value)
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ tessie_enabled: value }),
+      })
+    } catch (e) {
+      console.warn('[Dashboard] Failed to toggle Tessie:', e)
+      setTessieEnabled(!value)
     }
   }, [])
 
@@ -46,6 +68,8 @@ export function Dashboard() {
         chargePortConnected={status.charge_port_connected}
         teslaSoc={status.tesla_soc}
         solaxDataAgeSecs={status.solax_data_age_secs}
+        tessieEnabled={tessieEnabled}
+        onTessieToggle={handleTessieToggle}
       />
       <AIRecommendationStrip
         autoOptimize={autoOptimize}
@@ -86,6 +110,9 @@ export function Dashboard() {
             targetSoc={status.target_soc}
             teslaChargingAmps={status.tesla_charging_amps}
             teslaChargingKw={status.tesla_charging_kw}
+            chargingStrategy={status.charging_strategy}
+            departureTime={status.departure_time}
+            mode={status.mode}
           />
         </Grid>
         <Grid item xs={12} sm={4}>

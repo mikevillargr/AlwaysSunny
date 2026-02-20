@@ -36,7 +36,7 @@ export function ChargingControls({
 }: ChargingControlsProps) {
   const [targetSoC, setTargetSoC] = useState<number>(80)
   const [gridBudget, setGridBudget] = useState<number>(25)
-  const [gridImportLimit, setGridImportLimit] = useState<number>(4000)
+  const [gridImportLimit, setGridImportLimit] = useState<number>(7000)
   const [departureTime, setDepartureTime] = useState<string>('07:00')
   const [departurePeriod, setDeparturePeriod] = useState<'AM' | 'PM'>('AM')
   const [chargingMode, setChargingMode] = useState<'departure' | 'solar'>(
@@ -69,7 +69,7 @@ export function ChargingControls({
             const limit = parseFloat(data.max_grid_import_w)
             if (limit <= 0) {
               setNoLimit(true)
-              setGridImportLimit(4000) // default when re-enabling
+              setGridImportLimit(7000) // default when re-enabling
             } else {
               setNoLimit(false)
               setGridImportLimit(limit)
@@ -615,8 +615,8 @@ export function ChargingControls({
                 onChange={(e) => {
                   const v = parseFloat(e.target.value)
                   setGridBudget(v)
-                  saveSettings({ daily_grid_budget_kwh: v })
                 }}
+                onBlur={() => saveSettingsNow({ daily_grid_budget_kwh: gridBudget })}
                 variant="outlined"
                 size="small"
                 InputProps={{
@@ -833,8 +833,8 @@ export function ChargingControls({
                 onChange={(e) => {
                   const v = parseFloat(e.target.value)
                   setGridImportLimit(v)
-                  saveSettings({ max_grid_import_w: v })
                 }}
+                onBlur={() => saveSettingsNow({ max_grid_import_w: gridImportLimit })}
                 variant="outlined"
                 size="small"
                 InputProps={{

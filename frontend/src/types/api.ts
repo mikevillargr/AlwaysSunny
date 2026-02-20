@@ -9,6 +9,12 @@ export type Mode =
   | 'Suspended – Location Unknown'
   | 'Cutoff – Grid Budget Reached'
   | 'Manual Override'
+  | 'Charging – No Limits'
+  | 'AI Optimizing'
+  | 'Tessie Disconnected'
+  | 'Solar-first'
+  | 'Ready by Departure'
+  | string
 
 export type ChargerStatus =
   | 'charging_at_home'
@@ -94,6 +100,11 @@ export interface StatusResponse {
   ai_last_updated_secs: number
   // Target SoC from settings
   target_soc: number
+  // Tessie connection
+  tessie_enabled: boolean
+  // Charging strategy
+  charging_strategy: string
+  departure_time: string
   // Session (null if no active session)
   session: Session | null
   // Forecast
