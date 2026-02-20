@@ -141,7 +141,10 @@ Trigger reason: {trigger_reason}
 - If strategy is "solar", prioritize zero or minimal grid draw even if target SoC may not be reached
 - Never recommend amps that would cause grid import to exceed {max_grid_import_w:.0f}W or exhaust budget_remaining_kwh
 - Each amp ≈ 240W at 240V circuit
-- Prefer gradual changes (±2A per adjustment) for battery health
+- Available solar surplus = solar_yield - household_demand (this is what can power the car without grid)
+- Recommend the IDEAL target amps — do NOT limit yourself to small increments from current_amps. The system handles ramping.
+- If solar surplus is abundant (e.g. >5000W available), push aggressively to high amps (25-32A)
+- Maximum charging rate is 32A — use it when solar surplus supports it
 - 0A means stop charging entirely
 
 === REASONING MESSAGE INSTRUCTIONS ===
