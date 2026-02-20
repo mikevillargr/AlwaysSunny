@@ -228,6 +228,18 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
         session_kwh_added = session.kwh_added if session else 0.0
         session_solar_pct = session.solar_pct if session else 0.0
 
+        # Get current time in user's timezone
+        from datetime import datetime
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        user_tz = state.settings.get("timezone", "Asia/Manila")
+        try:
+            current_time = datetime.now(ZoneInfo(user_tz)).strftime("%H:%M")
+        except Exception:
+            current_time = datetime.now().strftime("%H:%M")
+
         prompt = build_prompt(
             solar_w=state.solax.solar_w,
             household_w=state.solax.household_demand_w,
@@ -249,6 +261,7 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             session_elapsed_mins=session_elapsed_mins,
             session_kwh_added=session_kwh_added,
             session_solar_pct=session_solar_pct,
+            current_time=current_time,
         )
 
         # Apply admin AI sensitivity settings if configured

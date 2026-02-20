@@ -14,7 +14,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material'
-import { Bot, Play, Shuffle, Sun, Cloud, Car, Wallet, Save, AlertTriangle } from 'lucide-react'
+import { Bot, Play, Shuffle, Sun, Cloud, Car, Wallet, Save, AlertTriangle, FileText, Edit3 } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
 // --- Types ---
@@ -90,6 +90,7 @@ const defaultInputs = {
   session_elapsed_mins: 45,
   session_kwh_added: 3.2,
   session_solar_pct: 82,
+  current_time: '13:00',
 }
 
 const rand = (min: number, max: number) => Math.round(min + Math.random() * (max - min))
@@ -103,7 +104,7 @@ const presets = {
     current_amps: 12, charging_strategy: 'solar', departure_time: '',
     grid_budget_total_kwh: 25, grid_budget_used_kwh: 2, max_grid_import_w: 7000,
     hours_until_sunset: 6, session_elapsed_mins: 30, session_kwh_added: 2.5,
-    session_solar_pct: 95,
+    session_solar_pct: 95, current_time: '11:00',
   },
   lowSolar: {
     solar_w: 350, household_w: 900, grid_import_w: 600, battery_soc: 40,
@@ -111,7 +112,7 @@ const presets = {
     current_amps: 8, charging_strategy: 'solar', departure_time: '',
     grid_budget_total_kwh: 25, grid_budget_used_kwh: 12, max_grid_import_w: 7000,
     hours_until_sunset: 2, session_elapsed_mins: 90, session_kwh_added: 6.1,
-    session_solar_pct: 55,
+    session_solar_pct: 55, current_time: '16:00',
   },
   departure: {
     solar_w: 1200, household_w: 800, grid_import_w: 400, battery_soc: 55,
@@ -119,7 +120,7 @@ const presets = {
     current_amps: 10, charging_strategy: 'departure', departure_time: '07:00',
     grid_budget_total_kwh: 25, grid_budget_used_kwh: 8, max_grid_import_w: 7000,
     hours_until_sunset: 1.5, session_elapsed_mins: 120, session_kwh_added: 8.5,
-    session_solar_pct: 60,
+    session_solar_pct: 60, current_time: '02:30',
   },
   budgetCrunch: {
     solar_w: 1800, household_w: 1000, grid_import_w: 500, battery_soc: 50,
@@ -127,7 +128,7 @@ const presets = {
     current_amps: 14, charging_strategy: 'solar', departure_time: '',
     grid_budget_total_kwh: 10, grid_budget_used_kwh: 9.2, max_grid_import_w: 4000,
     hours_until_sunset: 4, session_elapsed_mins: 60, session_kwh_added: 5.0,
-    session_solar_pct: 70,
+    session_solar_pct: 70, current_time: '14:00',
   },
 }
 
@@ -140,6 +141,12 @@ export function Admin() {
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [showPrompt, setShowPrompt] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
+
+  // Prompt editor
+  const [generatedPrompt, setGeneratedPrompt] = useState('')
+  const [editedPrompt, setEditedPrompt] = useState('')
+  const [promptEditing, setPromptEditing] = useState(false)
+  const [promptLoading, setPromptLoading] = useState(false)
 
   // AI Settings
   const [aiSettings, setAiSettings] = useState<AISettings | null>(null)
@@ -209,7 +216,28 @@ export function Admin() {
       session_elapsed_mins: rand(5, 180),
       session_kwh_added: randF(0.5, 15),
       session_solar_pct: rand(20, 100),
+      current_time: `${String(rand(6, 18)).padStart(2, '0')}:${String(rand(0, 59)).padStart(2, '0')}`,
     })
+  }
+
+  const generatePrompt = async () => {
+    setPromptLoading(true)
+    try {
+      const resp = await apiFetch('/api/debug/ai-prompt-preview', {
+        method: 'POST',
+        body: JSON.stringify(inputs),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        setGeneratedPrompt(data.prompt)
+        setEditedPrompt(data.prompt)
+        setPromptEditing(false)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setPromptLoading(false)
+    }
   }
 
   const runTest = async () => {
@@ -217,9 +245,13 @@ export function Admin() {
     setError('')
     setResult(null)
     try {
+      const payload: Record<string, unknown> = { ...inputs }
+      if (editedPrompt && editedPrompt !== generatedPrompt) {
+        payload.custom_prompt = editedPrompt
+      }
       const resp = await apiFetch('/api/debug/ai-test', {
         method: 'POST',
-        body: JSON.stringify(inputs),
+        body: JSON.stringify(payload),
       })
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ detail: resp.statusText }))
@@ -499,10 +531,22 @@ export function Admin() {
           <Grid item xs={4} sm={2}>
             <TextField label="Hrs to Sunset" type="number" value={inputs.hours_until_sunset} onChange={(e) => updateInput('hours_until_sunset', +e.target.value)} size="small" fullWidth inputProps={{ step: 0.5 }} />
           </Grid>
+          <Grid item xs={4} sm={2}>
+            <TextField label="Current Time" value={inputs.current_time} onChange={(e) => updateInput('current_time', e.target.value)} size="small" fullWidth placeholder="13:00" helperText="HH:MM" />
+          </Grid>
         </Grid>
 
         {/* Buttons */}
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={promptLoading ? <CircularProgress size={14} color="inherit" /> : <FileText size={14} />}
+            onClick={generatePrompt}
+            disabled={promptLoading || loading}
+            sx={{ bgcolor: '#2a3f57', '&:hover': { bgcolor: '#3a5070' }, textTransform: 'none', fontWeight: 700 }}
+          >
+            {promptLoading ? 'Generating...' : 'Generate Prompt'}
+          </Button>
           <Button
             variant="contained"
             startIcon={loading ? <CircularProgress size={14} color="inherit" /> : <Play size={14} />}
@@ -510,7 +554,7 @@ export function Admin() {
             disabled={loading}
             sx={{ bgcolor: '#f5c518', color: '#0f1923', '&:hover': { bgcolor: '#e0b400' }, textTransform: 'none', fontWeight: 700 }}
           >
-            {loading ? 'Calling Ollama...' : 'Run AI Test'}
+            {loading ? 'Calling Ollama...' : editedPrompt && editedPrompt !== generatedPrompt ? 'Run with Custom Prompt' : 'Run AI Test'}
           </Button>
           <Button variant="outlined" size="small" startIcon={<Shuffle size={14} />} onClick={randomize} sx={{ textTransform: 'none', borderColor: '#2a3f57', color: '#8da4be' }}>
             Randomize
@@ -528,6 +572,62 @@ export function Admin() {
             Budget Crunch
           </Button>
         </Box>
+
+        {/* Prompt Editor */}
+        {generatedPrompt && (
+          <Card sx={{ p: 2, mb: 2, bgcolor: '#0b1420', border: promptEditing ? '1px solid #a855f7' : '1px solid #1a2a3d' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
+                Prompt {promptEditing ? '(Editing)' : '(Read-only)'} {editedPrompt !== generatedPrompt && '• Modified'}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {editedPrompt !== generatedPrompt && (
+                  <Button
+                    size="small"
+                    onClick={() => { setEditedPrompt(generatedPrompt); setPromptEditing(false) }}
+                    sx={{ textTransform: 'none', color: '#ef4444', fontSize: '0.7rem', minWidth: 0, px: 1 }}
+                  >
+                    Reset
+                  </Button>
+                )}
+                <Button
+                  size="small"
+                  startIcon={<Edit3 size={12} />}
+                  onClick={() => setPromptEditing(!promptEditing)}
+                  sx={{ textTransform: 'none', color: promptEditing ? '#a855f7' : '#4a6382', fontSize: '0.7rem', minWidth: 0, px: 1 }}
+                >
+                  {promptEditing ? 'Lock' : 'Edit'}
+                </Button>
+              </Box>
+            </Box>
+            {promptEditing ? (
+              <textarea
+                value={editedPrompt}
+                onChange={(e) => setEditedPrompt(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: 300,
+                  maxHeight: 500,
+                  background: '#0b1420',
+                  color: '#8da4be',
+                  border: '1px solid #2a3f57',
+                  borderRadius: 4,
+                  padding: 8,
+                  fontFamily: 'monospace',
+                  fontSize: '0.7rem',
+                  lineHeight: 1.5,
+                  resize: 'vertical',
+                }}
+              />
+            ) : (
+              <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#6b8299', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                  {editedPrompt || generatedPrompt}
+                </Typography>
+              </Box>
+            )}
+          </Card>
+        )}
 
         {error && (
           <Alert severity="error" sx={{ mb: 2, bgcolor: 'rgba(239,68,68,0.08)' }}>

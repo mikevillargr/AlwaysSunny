@@ -38,6 +38,7 @@ class AITestRequest(BaseModel):
     session_kwh_added: float = 3.2
     session_solar_pct: float = 82.0
     hours_until_sunset: float = 5.5
+    current_time: str = "13:00"
     irradiance_curve: str = (
         "13:00 | 820 W/m² | 2600W | 15% cloud\n"
         "14:00 | 750 W/m² | 2400W | 20% cloud\n"
@@ -45,27 +46,12 @@ class AITestRequest(BaseModel):
         "16:00 | 350 W/m² | 1100W | 30% cloud\n"
         "17:00 | 120 W/m² | 380W  | 40% cloud"
     )
+    custom_prompt: Optional[str] = None
 
 
-@router.post("/debug/ai-test")
-async def ai_pipeline_test(
-    body: AITestRequest = AITestRequest(),
-    admin: dict = Depends(get_admin_user),
-):
-    """Full AI pipeline dry run with mock data.
-
-    Returns all 5 pipeline stages:
-    1. Prompt sent to Ollama
-    2. Raw Ollama response
-    3. Parsed recommendation
-    4. Simulated Tessie command (DRY RUN)
-    5. User-facing message as it would appear in the AI banner
-    """
-    settings = get_settings()
-    grid_remaining = max(0, body.grid_budget_total_kwh - body.grid_budget_used_kwh)
-
-    # 1. Build prompt
-    prompt = build_prompt(
+def _build_test_prompt(body: AITestRequest, grid_remaining: float) -> str:
+    """Build prompt from test request body."""
+    return build_prompt(
         solar_w=body.solar_w,
         household_w=body.household_w,
         grid_import_w=body.grid_import_w,
@@ -86,7 +72,41 @@ async def ai_pipeline_test(
         session_elapsed_mins=body.session_elapsed_mins,
         session_kwh_added=body.session_kwh_added,
         session_solar_pct=body.session_solar_pct,
+        current_time=body.current_time,
     )
+
+
+@router.post("/debug/ai-prompt-preview")
+async def ai_prompt_preview(
+    body: AITestRequest = AITestRequest(),
+    admin: dict = Depends(get_admin_user),
+):
+    """Generate the prompt without calling Ollama. For inspection and editing."""
+    grid_remaining = max(0, body.grid_budget_total_kwh - body.grid_budget_used_kwh)
+    prompt = _build_test_prompt(body, grid_remaining)
+    return {"prompt": prompt}
+
+
+@router.post("/debug/ai-test")
+async def ai_pipeline_test(
+    body: AITestRequest = AITestRequest(),
+    admin: dict = Depends(get_admin_user),
+):
+    """Full AI pipeline dry run with mock data.
+
+    Returns all 5 pipeline stages:
+    1. Prompt sent to Ollama
+    2. Raw Ollama response
+    3. Parsed recommendation
+    4. Simulated Tessie command (DRY RUN)
+    5. User-facing message as it would appear in the AI banner
+    """
+    settings = get_settings()
+    grid_remaining = max(0, body.grid_budget_total_kwh - body.grid_budget_used_kwh)
+
+    # 1. Build prompt (or use custom prompt if provided)
+    auto_prompt = _build_test_prompt(body, grid_remaining)
+    prompt = body.custom_prompt if body.custom_prompt else auto_prompt
 
     # 2. Call Ollama
     start = time.time()
