@@ -96,6 +96,8 @@ def build_prompt(
     soc_gap = max(0, target_soc - tesla_soc)
     battery_capacity_kwh = 75.0  # Tesla Model 3/Y typical
     kwh_needed = (soc_gap / 100.0) * battery_capacity_kwh
+    solar_surplus_w = max(0, solar_w - household_w)
+    max_solar_amps = min(32, int(solar_surplus_w / 240))
     
     # Departure time context
     departure_context = ""
@@ -117,6 +119,7 @@ Max grid import rate: {max_grid_import_w:.0f}W
 === ACTUAL CONDITIONS (Solax — ground truth) ===
 Solar yield: {solar_w:.0f}W  |  Trend (last 5 min): {solar_trend}  [rising | stable | falling]
 Household demand: {household_w:.0f}W
+Solar surplus (available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw
 Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
 Home battery SoC: {battery_soc}%  |  Battery power: {battery_w:.0f}W
 
@@ -141,9 +144,9 @@ Trigger reason: {trigger_reason}
 - If strategy is "solar", prioritize zero or minimal grid draw even if target SoC may not be reached
 - Never recommend amps that would cause grid import to exceed {max_grid_import_w:.0f}W or exhaust budget_remaining_kwh
 - Each amp ≈ 240W at 240V circuit
-- Available solar surplus = solar_yield - household_demand (this is what can power the car without grid)
+- The "Solar surplus" line above already calculates the max amps from solar alone — use it as your baseline
 - Recommend the IDEAL target amps — do NOT limit yourself to small increments from current_amps. The system handles ramping.
-- If solar surplus is abundant (e.g. >5000W available), push aggressively to high amps (25-32A)
+- Your recommendation should be AT LEAST the calculated max solar amps (shown above) when solar surplus is positive and SoC gap exists
 - Maximum charging rate is 32A — use it when solar surplus supports it
 - 0A means stop charging entirely
 
