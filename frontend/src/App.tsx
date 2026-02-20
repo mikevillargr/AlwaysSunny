@@ -104,7 +104,8 @@ export function App() {
   const { user, loading, signOut } = useAuth()
   const [activeTab, setActiveTab] = useState(0)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase())
+  const userEmail = (user?.email || (user?.user_metadata as Record<string, string>)?.email || '').toLowerCase()
+  const isAdmin = userEmail && ADMIN_EMAILS.includes(userEmail)
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue)
   }
