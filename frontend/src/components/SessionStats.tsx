@@ -1,7 +1,26 @@
 import React from 'react'
 import { Box, Card, Typography, Grid } from '@mui/material'
 import { CheckCircle, AlertCircle } from 'lucide-react'
-export function SessionStats() {
+import type { Session } from '../types/api'
+
+interface SessionStatsProps {
+  session: Session | null
+  teslaSoc: number
+  targetSoc: number
+  teslaChargingAmps: number
+  teslaChargingKw: number
+}
+
+export function SessionStats({
+  session,
+  teslaSoc,
+  targetSoc,
+  teslaChargingAmps,
+  teslaChargingKw,
+}: SessionStatsProps) {
+  const solarPct = session?.solar_pct ?? 0
+  const gridPct = 100 - solarPct
+  const socProgress = targetSoc > 0 ? Math.min(100, (teslaSoc / targetSoc) * 100) : 0
   return (
     <Card
       sx={{
@@ -38,10 +57,10 @@ export function SessionStats() {
           }}
         >
           <Typography variant="h3" fontWeight="700" color="#f5c518">
-            58%
+            {teslaSoc}%
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            → 80% target
+            → {targetSoc}% target
           </Typography>
         </Box>
 
@@ -61,7 +80,7 @@ export function SessionStats() {
               top: 0,
               left: 0,
               height: '100%',
-              width: '58%',
+              width: `${Math.min(100, teslaSoc)}%`,
               bgcolor: '#3b82f6',
             }}
           />
@@ -71,7 +90,7 @@ export function SessionStats() {
               top: 0,
               left: 0,
               height: '100%',
-              width: '49%',
+              width: `${Math.min(100, teslaSoc) * (solarPct / 100)}%`,
               bgcolor: '#f5c518',
             }}
           />
@@ -85,10 +104,10 @@ export function SessionStats() {
           }}
         >
           <Typography variant="caption" color="#f5c518" fontWeight="600">
-            Solar 85%
+            Solar {Math.round(solarPct)}%
           </Typography>
           <Typography variant="caption" color="#3b82f6" fontWeight="600">
-            Grid 15%
+            Grid {Math.round(gridPct)}%
           </Typography>
         </Box>
       </Box>
@@ -123,10 +142,10 @@ export function SessionStats() {
           }}
         >
           <Typography variant="h4" fontWeight="700" color="#f5c518">
-            85%
+            {Math.round(solarPct)}%
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            · 7.1 kWh solar
+            · {(session?.solar_kwh ?? 0).toFixed(1)} kWh solar
           </Typography>
         </Box>
       </Box>
@@ -153,10 +172,12 @@ export function SessionStats() {
         />
         <Box>
           <Typography variant="body2" fontWeight="600" color="text.primary">
-            On track for 7:00 AM departure
+            {teslaSoc >= targetSoc ? 'Target SoC reached!' : 'Charging in progress'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            80% target reached in ~3h 20m at current rate
+            {teslaSoc >= targetSoc
+              ? `${targetSoc}% target reached`
+              : `${targetSoc - teslaSoc}% remaining to ${targetSoc}% target`}
           </Typography>
         </Box>
       </Box>
@@ -175,7 +196,7 @@ export function SessionStats() {
             CHARGING AT
           </Typography>
           <Typography variant="body1" fontWeight="600">
-            12A · 2.9 kW
+            {teslaChargingAmps}A · {teslaChargingKw.toFixed(1)} kW
           </Typography>
         </Grid>
         <Grid item xs={6}>
@@ -190,7 +211,7 @@ export function SessionStats() {
             DEPARTS IN
           </Typography>
           <Typography variant="body1" fontWeight="600">
-            21h 8m
+            {session ? `${session.elapsed_mins}m` : '—'}
           </Typography>
         </Grid>
         <Grid item xs={6}>
@@ -205,7 +226,7 @@ export function SessionStats() {
             ADDED
           </Typography>
           <Typography variant="body1" fontWeight="600">
-            8.4 kWh
+            {(session?.kwh_added ?? 0).toFixed(1)} kWh
           </Typography>
         </Grid>
         <Grid item xs={6}>
@@ -220,7 +241,7 @@ export function SessionStats() {
             SAVED
           </Typography>
           <Typography variant="body1" fontWeight="700" color="#22c55e">
-            ₱710
+            ₱{Math.round(session?.saved_pesos ?? 0).toLocaleString()}
           </Typography>
         </Grid>
       </Grid>

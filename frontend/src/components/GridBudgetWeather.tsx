@@ -1,7 +1,20 @@
 import React from 'react'
 import { Card, Box, Typography } from '@mui/material'
 import { CloudSun, Sun, Zap } from 'lucide-react'
-export function GridBudgetWeather() {
+import type { Forecast } from '../types/api'
+
+interface GridBudgetWeatherProps {
+  forecast: Forecast
+  solarW: number
+}
+
+export function GridBudgetWeather({ forecast, solarW }: GridBudgetWeatherProps) {
+  // Get current hour's data from forecast
+  const currentHour = new Date().getHours()
+  const hourStr = `${String(currentHour).padStart(2, '0')}:00`
+  const currentHourData = forecast.hourly.find((h) => h.hour === hourStr)
+  const cloudCover = currentHourData?.cloud_cover_pct ?? 0
+  const irradiance = currentHourData?.irradiance_wm2 ?? 0
   return (
     <Card
       sx={{
@@ -59,7 +72,7 @@ export function GridBudgetWeather() {
             </Typography>
           </Box>
           <Typography variant="h6" fontWeight="700" color="text.primary">
-            35%
+            {cloudCover}%
           </Typography>
         </Box>
 
@@ -86,11 +99,11 @@ export function GridBudgetWeather() {
                 letterSpacing: 0.5,
               }}
             >
-              UV INDEX
+              SOLAR YIELD
             </Typography>
           </Box>
           <Typography variant="h6" fontWeight="700" color="text.primary">
-            6.2
+            {Math.round(solarW).toLocaleString()}W
           </Typography>
         </Box>
 
@@ -128,7 +141,7 @@ export function GridBudgetWeather() {
               lineHeight: 1,
             }}
           >
-            580
+            {irradiance}
             <span
               style={{
                 fontSize: '0.7rem',
@@ -158,7 +171,9 @@ export function GridBudgetWeather() {
             mb: 1,
           }}
         >
-          Clearing by 11am — peak solar window 10am–2pm
+          {forecast.peak_window_start
+            ? `Peak solar window ${forecast.peak_window_start}–${forecast.peak_window_end}`
+            : 'No solar forecast available'}
         </Typography>
         <Typography
           variant="caption"

@@ -1,13 +1,21 @@
 import React from 'react'
 import { Box, Typography, Chip, Switch, FormControlLabel } from '@mui/material'
 import { Bot, TrendingUp } from 'lucide-react'
+import type { AIConfidence } from '../types/api'
+
 interface AIRecommendationStripProps {
   autoOptimize: boolean
   onAutoOptimizeChange: (value: boolean) => void
+  aiRecommendedAmps: number
+  aiConfidence: AIConfidence
+  aiReasoning: string
 }
 export function AIRecommendationStrip({
   autoOptimize,
   onAutoOptimizeChange,
+  aiRecommendedAmps,
+  aiConfidence,
+  aiReasoning,
 }: AIRecommendationStripProps) {
   return (
     <Box
@@ -90,10 +98,10 @@ export function AIRecommendationStrip({
                 lineHeight: 1,
               }}
             >
-              12A
+              {aiRecommendedAmps}A
             </Typography>
             <Chip
-              label="medium confidence"
+              label={`${aiConfidence} confidence`}
               size="small"
               sx={{
                 height: 18,
@@ -156,7 +164,7 @@ export function AIRecommendationStrip({
           }}
         >
           {autoOptimize
-            ? '"Peak solar in 45 min — holding at moderate rate now, will suggest increase to 18A once irradiance peaks."'
+            ? `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`
             : '"Auto-optimization paused. Manual control active."'}
         </Typography>
       </Box>

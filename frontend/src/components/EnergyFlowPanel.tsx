@@ -1,7 +1,36 @@
 import React from 'react'
 import { Box, Card, Typography } from '@mui/material'
 import { Sun, Home, Zap, Car } from 'lucide-react'
-export function EnergyFlowPanel() {
+
+interface EnergyFlowPanelProps {
+  solarW: number
+  householdDemandW: number
+  gridImportW: number
+  teslaChargingAmps: number
+  teslaChargingKw: number
+  chargingState: string
+  chargePortConnected: boolean
+}
+
+function fmt(w: number): string {
+  return w >= 1000 ? `${(w / 1000).toFixed(1)}kW` : `${Math.round(w)}W`
+}
+
+function fmtComma(w: number): string {
+  return Math.round(w).toLocaleString()
+}
+
+export function EnergyFlowPanel({
+  solarW,
+  householdDemandW,
+  gridImportW,
+  teslaChargingAmps,
+  teslaChargingKw,
+  chargingState,
+  chargePortConnected,
+}: EnergyFlowPanelProps) {
+  const teslaW = teslaChargingKw * 1000
+  const isCharging = chargingState === 'Charging' && chargePortConnected
   return (
     <Card
       sx={{
@@ -141,7 +170,7 @@ export function EnergyFlowPanel() {
                 fontSize="13"
                 fontWeight="bold"
               >
-                2,840W
+                {fmtComma(solarW)}W
               </text>
             </g>
 
@@ -169,7 +198,7 @@ export function EnergyFlowPanel() {
               fontSize="10"
               opacity="0.8"
             >
-              2,840W
+              {fmt(solarW)}
             </text>
 
             {/* Home — center */}
@@ -212,7 +241,7 @@ export function EnergyFlowPanel() {
                 fontSize="13"
                 fontWeight="bold"
               >
-                880W
+                {fmtComma(householdDemandW)}W
               </text>
             </g>
 
@@ -240,7 +269,7 @@ export function EnergyFlowPanel() {
               fontSize="10"
               opacity="0.8"
             >
-              1,840W · 8A
+              {fmt(teslaW)} · {teslaChargingAmps}A
             </text>
 
             {/* Home → Grid line (lower right) */}
@@ -267,7 +296,7 @@ export function EnergyFlowPanel() {
               fontSize="10"
               opacity="0.8"
             >
-              +120W
+              {gridImportW >= 0 ? '+' : ''}{fmt(Math.abs(gridImportW))}
             </text>
 
             {/* Tesla — upper right (HERO) */}
@@ -313,7 +342,7 @@ export function EnergyFlowPanel() {
                 fontSize="13"
                 fontWeight="bold"
               >
-                CHARGING
+                {isCharging ? 'CHARGING' : chargePortConnected ? 'PLUGGED IN' : 'OFFLINE'}
               </text>
             </g>
 
@@ -358,7 +387,7 @@ export function EnergyFlowPanel() {
                 fontSize="11"
                 fontWeight="bold"
               >
-                +120W
+                {gridImportW >= 0 ? '+' : ''}{fmt(Math.abs(gridImportW))}
               </text>
             </g>
           </svg>
@@ -406,25 +435,25 @@ export function EnergyFlowPanel() {
           {[
             {
               label: 'SOLAR YIELD',
-              value: '2,840',
+              value: fmtComma(solarW),
               unit: 'W',
               color: '#f5c518',
             },
             {
               label: 'HOME DEMAND',
-              value: '880',
+              value: fmtComma(householdDemandW),
               unit: 'W',
               color: '#14b8a6',
             },
             {
               label: 'GRID IMPORT',
-              value: '+120',
+              value: `${gridImportW >= 0 ? '+' : ''}${fmtComma(Math.abs(gridImportW))}`,
               unit: 'W',
               color: '#3b82f6',
             },
             {
               label: 'CHARGING',
-              value: '8',
+              value: String(teslaChargingAmps),
               unit: 'A',
               color: '#22c55e',
             },

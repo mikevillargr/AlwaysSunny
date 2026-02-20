@@ -1,13 +1,44 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Box, Typography, Slider, Tooltip } from '@mui/material'
 import { Car, Bot } from 'lucide-react'
+import { apiFetch } from '../lib/api'
+
 interface AmperageControlProps {
   autoOptimize?: boolean
+  teslaChargingAmps: number
+  teslaChargingKw: number
 }
 export function AmperageControl({
   autoOptimize = false,
+  teslaChargingAmps,
+  teslaChargingKw,
 }: AmperageControlProps) {
-  const [teslaAmperage, setTeslaAmperage] = useState<number>(8)
+  const [localAmps, setLocalAmps] = useState<number>(teslaChargingAmps)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Sync from live data when not dragging
+  useEffect(() => {
+    setLocalAmps(teslaChargingAmps)
+  }, [teslaChargingAmps])
+
+  const handleSliderChange = (_: unknown, val: number | number[]) => {
+    const amps = val as number
+    setLocalAmps(amps)
+    // Debounce the API call
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await apiFetch('/api/override/amps', {
+          method: 'POST',
+          body: JSON.stringify({ amps }),
+        })
+      } catch (e) {
+        console.warn('[AmperageControl] Failed to set amps:', e)
+      }
+    }, 500)
+  }
+
+  const teslaAmperage = localAmps
   return (
     <Card
       sx={{
@@ -119,7 +150,7 @@ export function AmperageControl({
         >
           <Slider
             value={teslaAmperage}
-            onChange={(_, val) => setTeslaAmperage(val as number)}
+            onChange={handleSliderChange}
             min={0}
             max={32}
             step={1}

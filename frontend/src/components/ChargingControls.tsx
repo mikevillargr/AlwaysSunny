@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Card,
   Box,
@@ -17,9 +17,25 @@ import {
   Activity,
   Infinity,
 } from 'lucide-react'
-export function ChargingControls() {
+import { apiFetch } from '../lib/api'
+
+interface ChargingControlsProps {
+  teslaSoc: number
+  gridImportW: number
+  gridBudgetTotalKwh: number
+  gridBudgetUsedKwh: number
+  gridBudgetPct: number
+}
+
+export function ChargingControls({
+  teslaSoc,
+  gridImportW,
+  gridBudgetTotalKwh,
+  gridBudgetUsedKwh,
+  gridBudgetPct,
+}: ChargingControlsProps) {
   const [targetSoC, setTargetSoC] = useState<number>(80)
-  const [gridBudget, setGridBudget] = useState<number>(5.0)
+  const [gridBudget, setGridBudget] = useState<number>(gridBudgetTotalKwh)
   const [gridImportLimit, setGridImportLimit] = useState<number>(500)
   const [departureTime, setDepartureTime] = useState<string>('07:00')
   const [departurePeriod, setDeparturePeriod] = useState<'AM' | 'PM'>('AM')
@@ -28,6 +44,44 @@ export function ChargingControls() {
   )
   const [noBudget, setNoBudget] = useState<boolean>(false)
   const [noLimit, setNoLimit] = useState<boolean>(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Load settings from backend on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const res = await apiFetch('/api/settings')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.target_soc) setTargetSoC(data.target_soc)
+          if (data.daily_grid_budget_kwh) setGridBudget(data.daily_grid_budget_kwh)
+          if (data.max_grid_import_w) setGridImportLimit(data.max_grid_import_w)
+          if (data.departure_time) setDepartureTime(data.departure_time)
+          if (data.charging_strategy) setChargingMode(data.charging_strategy)
+        }
+      } catch (e) {
+        console.warn('[ChargingControls] Failed to load settings:', e)
+      }
+      setSettingsLoaded(true)
+    }
+    loadSettings()
+  }, [])
+
+  // Debounced save to backend
+  const saveSettings = useCallback((updates: Record<string, unknown>) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await apiFetch('/api/settings', {
+          method: 'POST',
+          body: JSON.stringify(updates),
+        })
+      } catch (e) {
+        console.warn('[ChargingControls] Failed to save:', e)
+      }
+    }, 800)
+  }, [])
   return (
     <Card
       sx={{
@@ -128,7 +182,10 @@ export function ChargingControls() {
               return (
                 <Box
                   key={key}
-                  onClick={() => setChargingMode(key as 'departure' | 'solar')}
+                  onClick={() => {
+                    setChargingMode(key as 'departure' | 'solar')
+                    saveSettings({ charging_strategy: key })
+                  }}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
@@ -359,11 +416,15 @@ export function ChargingControls() {
               mb: 1.5,
             }}
           >
-            Currently at 58%
+            Currently at {teslaSoc}%
           </Typography>
           <Slider
             value={targetSoC}
-            onChange={(_, val) => setTargetSoC(val as number)}
+            onChange={(_, val) => {
+              const v = val as number
+              setTargetSoC(v)
+              saveSettings({ target_soc: v })
+            }}
             min={50}
             max={100}
             step={5}
@@ -519,7 +580,11 @@ export function ChargingControls() {
               <TextField
                 type="number"
                 value={gridBudget}
-                onChange={(e) => setGridBudget(parseFloat(e.target.value))}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value)
+                  setGridBudget(v)
+                  saveSettings({ daily_grid_budget_kwh: v })
+                }}
                 variant="outlined"
                 size="small"
                 InputProps={{
@@ -560,15 +625,15 @@ export function ChargingControls() {
                 }}
               >
                 <Typography variant="caption" color="text.secondary">
-                  2.1 kWh used
+                  {gridBudgetUsedKwh.toFixed(1)} kWh used
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#3b82f6">
-                  42%
+                  {Math.round(gridBudgetPct)}%
                 </Typography>
               </Box>
               <LinearProgress
                 variant="determinate"
-                value={42}
+                value={Math.min(100, gridBudgetPct)}
                 sx={{
                   height: 6,
                   borderRadius: 3,
@@ -723,7 +788,11 @@ export function ChargingControls() {
               <TextField
                 type="number"
                 value={gridImportLimit}
-                onChange={(e) => setGridImportLimit(parseFloat(e.target.value))}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value)
+                  setGridImportLimit(v)
+                  saveSettings({ max_grid_import_w: v })
+                }}
                 variant="outlined"
                 size="small"
                 InputProps={{
@@ -764,7 +833,7 @@ export function ChargingControls() {
                   mb: 0.5,
                 }}
               >
-                Currently importing 120W
+                Currently importing {Math.round(gridImportW)}W
               </Typography>
               <Typography
                 variant="caption"

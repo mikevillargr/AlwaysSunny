@@ -10,69 +10,27 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { Sunrise, Sunset } from 'lucide-react'
-const data = [
-  {
-    hour: '5am',
-    irradiance: 0,
-  },
-  {
-    hour: '6am',
-    irradiance: 80,
-  },
-  {
-    hour: '7am',
-    irradiance: 220,
-  },
-  {
-    hour: '8am',
-    irradiance: 420,
-  },
-  {
-    hour: '9am',
-    irradiance: 580,
-  },
-  {
-    hour: '10am',
-    irradiance: 750,
-  },
-  {
-    hour: '11am',
-    irradiance: 880,
-  },
-  {
-    hour: '12pm',
-    irradiance: 920,
-  },
-  {
-    hour: '1pm',
-    irradiance: 890,
-  },
-  {
-    hour: '2pm',
-    irradiance: 760,
-  },
-  {
-    hour: '3pm',
-    irradiance: 560,
-  },
-  {
-    hour: '4pm',
-    irradiance: 340,
-  },
-  {
-    hour: '5pm',
-    irradiance: 150,
-  },
-  {
-    hour: '6pm',
-    irradiance: 40,
-  },
-  {
-    hour: '7pm',
-    irradiance: 0,
-  },
-]
-export function SolarForecastChart() {
+import type { Forecast } from '../types/api'
+
+interface SolarForecastChartProps {
+  forecast: Forecast
+}
+
+function formatHour(h: string): string {
+  const num = parseInt(h.split(':')[0], 10)
+  if (num === 0) return '12am'
+  if (num === 12) return '12pm'
+  return num > 12 ? `${num - 12}pm` : `${num}am`
+}
+
+export function SolarForecastChart({ forecast }: SolarForecastChartProps) {
+  const data = forecast.hourly.map((h) => ({
+    hour: formatHour(h.hour),
+    irradiance: h.irradiance_wm2,
+  }))
+
+  const currentHour = new Date().getHours()
+  const currentLabel = formatHour(`${currentHour}:00`)
   return (
     <Card
       sx={{
@@ -136,7 +94,7 @@ export function SolarForecastChart() {
                 color: '#f5c518',
               }}
             />
-            <ReferenceLine x="10am" stroke="white" strokeDasharray="3 3" />
+            <ReferenceLine x={currentLabel} stroke="white" strokeDasharray="3 3" />
             <Bar dataKey="irradiance" fill="#f5c518" radius={[2, 2, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
@@ -164,7 +122,7 @@ export function SolarForecastChart() {
               fontWeight: 600,
             }}
           >
-            10am – 2pm
+            {forecast.peak_window_start ? `${formatHour(forecast.peak_window_start)} – ${formatHour(forecast.peak_window_end)}` : '—'}
           </span>
         </Typography>
         <Box
@@ -183,7 +141,7 @@ export function SolarForecastChart() {
           >
             <Sunrise size={14} color="#8da4be" />
             <Typography variant="caption" color="text.secondary">
-              5:52am
+              {forecast.sunrise || '—'}
             </Typography>
           </Box>
           <Box
@@ -195,7 +153,7 @@ export function SolarForecastChart() {
           >
             <Sunset size={14} color="#8da4be" />
             <Typography variant="caption" color="text.secondary">
-              6:41pm
+              {forecast.sunset || '—'}
             </Typography>
           </Box>
         </Box>

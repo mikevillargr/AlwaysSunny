@@ -1,40 +1,39 @@
-import React, { useState } from 'react'
-import { Box, Typography, Chip, useTheme } from '@mui/material'
+import React from 'react'
+import { Box, Typography, Chip } from '@mui/material'
 import { Car } from 'lucide-react'
-type TeslaStatus = 'connected' | 'disconnected' | 'paused'
-const statusConfig: Record<
-  TeslaStatus,
-  {
-    label: string
-    color: string
-    pulse: boolean
+import type { ChargerStatus, ChargingState, Mode } from '../types/api'
+
+interface StatusBarProps {
+  mode: Mode
+  chargerStatus: ChargerStatus
+  chargingState: ChargingState
+  chargePortConnected: boolean
+  teslaSoc: number
+  solaxDataAgeSecs: number
+}
+
+function getStatusDisplay(props: StatusBarProps) {
+  const { chargerStatus, chargingState, chargePortConnected } = props
+  if (!chargePortConnected) {
+    return { label: 'Disconnected from Charger', color: '#4a6382', pulse: false }
   }
-> = {
-  connected: {
-    label: 'Connected to Charger',
-    color: '#22c55e',
-    pulse: true,
-  },
-  disconnected: {
-    label: 'Disconnected from Charger',
-    color: '#4a6382',
-    pulse: false,
-  },
-  paused: {
-    label: 'Charging Paused',
-    color: '#f59e0b',
-    pulse: false,
-  },
+  if (chargerStatus === 'charging_away') {
+    return { label: 'Charging Away from Home', color: '#f59e0b', pulse: false }
+  }
+  if (chargingState === 'Charging') {
+    return { label: `Charging · ${props.teslaSoc}% SoC`, color: '#22c55e', pulse: true }
+  }
+  if (chargingState === 'Complete') {
+    return { label: `Charge Complete · ${props.teslaSoc}%`, color: '#3b82f6', pulse: false }
+  }
+  if (chargingState === 'Stopped') {
+    return { label: 'Charging Paused', color: '#f59e0b', pulse: false }
+  }
+  return { label: 'Connected to Charger', color: '#22c55e', pulse: false }
 }
-const cycleStatus: Record<TeslaStatus, TeslaStatus> = {
-  connected: 'paused',
-  paused: 'disconnected',
-  disconnected: 'connected',
-}
-export function StatusBar() {
-  const theme = useTheme()
-  const [teslaStatus, setTeslaStatus] = useState<TeslaStatus>('connected')
-  const { label, color, pulse } = statusConfig[teslaStatus]
+
+export function StatusBar(props: StatusBarProps) {
+  const { label, color, pulse } = getStatusDisplay(props)
   return (
     <Box
       sx={{
@@ -89,7 +88,6 @@ export function StatusBar() {
             </Typography>
           </Box>
         }
-        onClick={() => setTeslaStatus((s) => cycleStatus[s])}
         sx={{
           bgcolor: `${color}1a`,
           border: '1px solid',
