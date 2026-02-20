@@ -4,12 +4,9 @@ from fastapi import APIRouter, Depends
 
 from middleware.auth import get_current_user
 from models.database import StatusResponse, Session, Forecast, ForecastHour
+from scheduler.control_loop import get_user_state, build_status_response, register_user_loop
 
 router = APIRouter()
-
-# In-memory state — populated by the control loop (Phase 2G)
-# For now, returns sample data matching the frontend TypeScript interface
-_live_state: dict = {}
 
 
 def get_sample_status(user_id: str) -> StatusResponse:
@@ -76,10 +73,18 @@ def get_sample_status(user_id: str) -> StatusResponse:
 async def get_status(user: dict = Depends(get_current_user)):
     """Return current dashboard state.
 
-    In production, this combines:
-    - In-memory control loop state (Solax, Tesla, AI)
-    - Active session from Supabase
-    - Cached weather forecast
+    Uses real control loop data when available, falls back to sample data.
+    Also ensures the user's control loop is registered.
     """
-    # TODO: Phase 2G — return real live state from control loop
-    return get_sample_status(user["id"])
+    user_id = user["id"]
+
+    # Ensure control loop is running for this user
+    register_user_loop(user_id)
+
+    # Try real data from control loop
+    state = get_user_state(user_id)
+    if state and state.solax is not None:
+        return build_status_response(state)
+
+    # Fallback to sample data (before first control loop tick)
+    return get_sample_status(user_id)

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from routers import status, sessions, settings, control, health
+from scheduler.control_loop import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
@@ -15,9 +16,10 @@ async def lifespan(app: FastAPI):
     print(f"[AlwaysSunny] Starting backend...")
     print(f"[AlwaysSunny] Supabase URL: {settings_config.supabase_url}")
     print(f"[AlwaysSunny] Ollama host: {settings_config.ollama_host}")
-    # TODO: Phase 2G — start APScheduler control loop here
+    start_scheduler()
+    print("[AlwaysSunny] Control loop scheduler started")
     yield
-    # TODO: Phase 2G — shutdown APScheduler here
+    stop_scheduler()
     print("[AlwaysSunny] Shutting down backend...")
 
 

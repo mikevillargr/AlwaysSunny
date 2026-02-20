@@ -16,6 +16,8 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  CircularProgress,
+  Tooltip,
 } from '@mui/material'
 import {
   Zap,
@@ -24,10 +26,13 @@ import {
   Settings as SettingsIcon,
   Menu as MenuIcon,
   X,
+  LogOut,
 } from 'lucide-react'
+import { useAuth } from './contexts/AuthContext'
 import { Dashboard } from './pages/Dashboard'
 import { History } from './pages/History'
 import { Settings } from './pages/Settings'
+import { Login } from './pages/Login'
 // Create custom theme
 const theme = createTheme({
   palette: {
@@ -92,6 +97,7 @@ const theme = createTheme({
   },
 })
 export function App() {
+  const { user, loading, signOut } = useAuth()
   const [activeTab, setActiveTab] = useState(0)
   const [mobileOpen, setMobileOpen] = useState(false)
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -111,6 +117,34 @@ export function App() {
       icon: <SettingsIcon size={20} />,
     },
   ]
+  if (loading) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box
+          sx={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: '#0b1929',
+          }}
+        >
+          <CircularProgress sx={{ color: '#f5c518' }} />
+        </Box>
+      </ThemeProvider>
+    )
+  }
+
+  if (!user) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Login />
+      </ThemeProvider>
+    )
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -168,6 +202,20 @@ export function App() {
                 iconPosition="start"
               />
             </Tabs>
+
+            {/* Sign Out */}
+            <Tooltip title="Sign out">
+              <IconButton
+                onClick={signOut}
+                sx={{
+                  color: 'text.secondary',
+                  ml: 1,
+                  display: { xs: 'none', md: 'flex' },
+                }}
+              >
+                <LogOut size={18} />
+              </IconButton>
+            </Tooltip>
 
             {/* Mobile Hamburger */}
             <IconButton

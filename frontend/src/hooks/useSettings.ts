@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Settings } from '../types/api'
+import { apiFetch } from '../lib/api'
 
 const DEFAULT_SETTINGS: Settings = {
   target_soc: 80,
@@ -34,7 +35,7 @@ export function useSettings(): UseSettingsReturn {
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/settings')
+      const res = await apiFetch('/api/settings')
       if (!res.ok) throw new Error(`API error: ${res.status}`)
       const data: Settings = await res.json()
       setSettings(data)
@@ -51,9 +52,8 @@ export function useSettings(): UseSettingsReturn {
   const updateSettings = useCallback(async (updates: Partial<Settings>) => {
     try {
       setLoading(true)
-      const res = await fetch('/api/settings', {
+      const res = await apiFetch('/api/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       })
       if (!res.ok) throw new Error(`API error: ${res.status}`)

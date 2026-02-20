@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { StatusResponse } from '../types/api'
 import { SAMPLE_STATUS, STATUS_POLL_INTERVAL } from '../utils/constants'
+import { apiFetch } from '../lib/api'
 
 interface UseStatusReturn {
   status: StatusResponse
@@ -17,7 +18,7 @@ export function useStatus(): UseStatusReturn {
   const fetchStatus = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/status')
+      const res = await apiFetch('/api/status')
       if (!res.ok) throw new Error(`API error: ${res.status}`)
       const data: StatusResponse = await res.json()
       setStatus(data)
