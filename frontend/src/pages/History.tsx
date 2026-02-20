@@ -6,6 +6,7 @@ import {
   Grid,
   Tabs,
   Tab,
+  Collapse,
   CircularProgress,
 } from '@mui/material'
 import { ChevronDown, ChevronUp, Battery } from 'lucide-react'
@@ -13,7 +14,7 @@ import { apiFetch } from '../lib/api'
 import type { SessionRecord } from '../types/api'
 
 function formatDuration(mins: number | null): string {
-  if (!mins) return '—'
+  if (!mins) return '\u2014'
   const h = Math.floor(mins / 60)
   const m = mins % 60
   return h > 0 ? `${h}h ${m}m` : `${m}m`
@@ -22,7 +23,7 @@ function formatDuration(mins: number | null): string {
 function formatTime(iso: string | null): string {
   if (!iso) return ''
   try {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase()
   } catch { return '' }
 }
 
@@ -32,35 +33,39 @@ function formatDate(iso: string | null): string {
     return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
   } catch { return '' }
 }
+
 function SessionCard({ session }: { session: SessionRecord }) {
+  const [expanded, setExpanded] = useState(false)
   const solarPct = session.solar_pct ?? 0
   const kwh = session.kwh_added ?? 0
   const solar = session.solar_kwh ?? 0
   const grid = session.grid_kwh ?? 0
   const saved = session.saved_pesos ?? 0
+  const isActive = !session.ended_at
 
   return (
-    <Card sx={{ mb: 2, p: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+    <Card
+      sx={{ mb: 2, p: 2, cursor: 'pointer' }}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          mb: 2,
+        }}
+      >
         <Box>
           <Typography variant="subtitle1" fontWeight="600" color="text.primary">
             {formatDate(session.started_at)}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {formatTime(session.started_at)}
-            {session.ended_at ? ` \u2192 ${formatTime(session.ended_at)}` : ' \u2192 In progress'}
+            {isActive ? ' \u2192 In progress' : ` \u2192 ${formatTime(session.ended_at)}`}
             {' \u00B7 '}
             {formatDuration(session.duration_mins)}
           </Typography>
-          {session.start_soc != null && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-              <Battery size={12} color="#8da4be" />
-              <Typography variant="caption" color="text.secondary">
-                {session.start_soc}% \u2192 {session.end_soc ?? '?'}%
-                {session.target_soc ? ` (target ${session.target_soc}%)` : ''}
-              </Typography>
-            </Box>
-          )}
         </Box>
         <Box sx={{ textAlign: 'right' }}>
           <Typography variant="h6" fontWeight="700" color="#22c55e">
@@ -82,7 +87,16 @@ function SessionCard({ session }: { session: SessionRecord }) {
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', width: '100%' }}>
+        {/* Progress Bar */}
+        <Box
+          sx={{
+            display: 'flex',
+            height: 8,
+            borderRadius: 4,
+            overflow: 'hidden',
+            width: '100%',
+          }}
+        >
           <Box sx={{ width: `${solarPct}%`, bgcolor: '#f5c518' }} />
           <Box sx={{ flexGrow: 1, bgcolor: '#3b82f6' }} />
         </Box>
@@ -95,6 +109,54 @@ function SessionCard({ session }: { session: SessionRecord }) {
             Grid: {grid.toFixed(1)} kWh
           </Typography>
         </Box>
+      </Box>
+
+      <Collapse in={expanded}>
+        <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #2a3f57' }}>
+          <Grid container spacing={2}>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                SoC Range
+              </Typography>
+              <Typography variant="body2" fontWeight="600" color="text.primary">
+                {session.start_soc ?? '\u2014'}% \u2192 {session.end_soc ?? (isActive ? 'charging' : '\u2014')}%
+                {session.target_soc ? ` (target ${session.target_soc}%)` : ''}
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Meralco Rate
+              </Typography>
+              <Typography variant="body2" fontWeight="600" color="text.primary">
+                \u20B1{session.meralco_rate?.toFixed(2) ?? '\u2014'}/kWh
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Solar Subsidy
+              </Typography>
+              <Typography variant="body2" fontWeight="600" color="#f5c518">
+                {Math.round(solarPct)}%
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Grid Cost Avoided
+              </Typography>
+              <Typography variant="body2" fontWeight="600" color="#22c55e">
+                \u20B1{Math.round(saved).toLocaleString()}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Box>
+      </Collapse>
+
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1 }}>
+        {expanded ? (
+          <ChevronUp size={16} color="#4a6382" />
+        ) : (
+          <ChevronDown size={16} color="#4a6382" />
+        )}
       </Box>
     </Card>
   )
@@ -112,7 +174,11 @@ export function History() {
         const res = await apiFetch('/api/sessions?limit=100')
         if (res.ok) {
           const data = await res.json()
-          setSessions(data.sessions || [])
+          // Filter out orphaned sessions (0 kWh, no end time, no data)
+          const valid = (data.sessions || []).filter((s: SessionRecord) =>
+            (s.kwh_added && s.kwh_added > 0) || !s.ended_at
+          )
+          setSessions(valid)
         }
       } catch (e) {
         console.warn('[History] Failed to fetch sessions:', e)
@@ -136,10 +202,11 @@ export function History() {
     return true
   })
 
-  // Compute summary stats from ALL sessions
-  const totalSolarKwh = sessions.reduce((sum, s) => sum + (s.solar_kwh ?? 0), 0)
-  const totalSaved = sessions.reduce((sum, s) => sum + (s.saved_pesos ?? 0), 0)
-  const totalKwh = sessions.reduce((sum, s) => sum + (s.kwh_added ?? 0), 0)
+  // Compute summary stats from completed sessions only
+  const completed = sessions.filter((s) => s.ended_at && s.kwh_added && s.kwh_added > 0)
+  const totalSolarKwh = completed.reduce((sum, s) => sum + (s.solar_kwh ?? 0), 0)
+  const totalSaved = completed.reduce((sum, s) => sum + (s.saved_pesos ?? 0), 0)
+  const totalKwh = completed.reduce((sum, s) => sum + (s.kwh_added ?? 0), 0)
   const avgSubsidy = totalKwh > 0 ? Math.round((totalSolarKwh / totalKwh) * 100) : 0
   const thisMonthCount = sessions.filter((s) => new Date(s.started_at) >= thisMonthStart).length
 
@@ -151,20 +218,40 @@ export function History() {
   ]
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', p: { xs: 2, md: 3 } }}>
+    <Box
+      sx={{
+        maxWidth: 1000,
+        mx: 'auto',
+        p: { xs: 2, md: 3 },
+      }}
+    >
       <Typography variant="h4" fontWeight="700" sx={{ mb: 3 }}>
         Session History
       </Typography>
 
       {/* Summary Stats */}
-      <Grid container spacing={2} justifyContent="center" sx={{ mb: 4 }}>
+      <Grid
+        container
+        spacing={2}
+        justifyContent="center"
+        sx={{ mb: 4 }}
+      >
         {summaryStats.map((stat, index) => (
           <Grid item xs={6} sm={3} md={2.5} key={index}>
             <Card sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase' }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ textTransform: 'uppercase' }}
+              >
                 {stat.label}
               </Typography>
-              <Typography variant="h5" fontWeight="700" color={stat.color || 'text.primary'} sx={{ mt: 1 }}>
+              <Typography
+                variant="h5"
+                fontWeight="700"
+                color={stat.color || 'text.primary'}
+                sx={{ mt: 1 }}
+              >
                 {stat.value}
               </Typography>
             </Card>
@@ -174,7 +261,12 @@ export function History() {
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} textColor="primary" indicatorColor="primary">
+        <Tabs
+          value={tabValue}
+          onChange={(_, v) => setTabValue(v)}
+          textColor="primary"
+          indicatorColor="primary"
+        >
           <Tab label="This Month" />
           <Tab label="Last Month" />
           <Tab label="All Time" />
