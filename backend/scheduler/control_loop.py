@@ -259,8 +259,11 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             f"({state.ai_recommendation.confidence}) — {state.ai_recommendation.reasoning[:60]}"
         )
     except Exception as e:
-        state.ai_status = "fallback"
-        logger.error(f"[{state.user_id[:8]}] AI call failed: {e}")
+        error_type = type(e).__name__
+        state.ai_status = f"error:{error_type}"
+        logger.error(f"[{state.user_id[:8]}] AI call failed ({error_type}): {e}")
+        # Don't clear ai_recommendation — keep last good one for graceful degradation
+        # The is_fresh check will naturally expire it after 6 min
 
 
 def _apply_grid_import_limit(

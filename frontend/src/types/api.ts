@@ -28,9 +28,11 @@ export type AIStatus =
   | 'active'
   | 'fallback'
   | 'suspended_night'
+  | 'suspended_no_solar'
   | 'suspended_away'
   | 'standby'
   | 'offline'
+  | string  // allows error:ReadTimeout etc from backend
 
 export type AIConfidence = 'low' | 'medium' | 'high'
 

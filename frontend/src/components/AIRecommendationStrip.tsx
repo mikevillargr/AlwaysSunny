@@ -1,6 +1,6 @@
 import React from 'react'
 import { Box, Typography, Chip, Switch, FormControlLabel } from '@mui/material'
-import { Bot, TrendingUp } from 'lucide-react'
+import { Bot, TrendingUp, AlertTriangle } from 'lucide-react'
 import type { AIConfidence } from '../types/api'
 
 interface AIRecommendationStripProps {
@@ -9,6 +9,7 @@ interface AIRecommendationStripProps {
   aiRecommendedAmps: number
   aiConfidence: AIConfidence
   aiReasoning: string
+  aiStatus?: string
   tessieEnabled?: boolean
   chargePortConnected?: boolean
 }
@@ -18,10 +19,13 @@ export function AIRecommendationStrip({
   aiRecommendedAmps,
   aiConfidence,
   aiReasoning,
+  aiStatus = 'standby',
   tessieEnabled = true,
   chargePortConnected = false,
 }: AIRecommendationStripProps) {
   const aiToggleEnabled = tessieEnabled && chargePortConnected
+  const isError = aiStatus.startsWith('error:')
+  const isFallback = aiStatus === 'fallback' || isError
 
   // Determine lockout reason
   const lockoutReason = !tessieEnabled
@@ -174,9 +178,16 @@ export function AIRecommendationStrip({
             flexShrink: 0,
           }}
         />
+        {isError && autoOptimize && (
+          <AlertTriangle
+            size={14}
+            color="#f59e0b"
+            style={{ flexShrink: 0 }}
+          />
+        )}
         <Typography
           variant="body2"
-          color="text.secondary"
+          color={isError && autoOptimize ? '#f59e0b' : 'text.secondary'}
           sx={{
             fontStyle: 'italic',
             lineHeight: 1.5,
@@ -184,9 +195,13 @@ export function AIRecommendationStrip({
         >
           {!aiToggleEnabled
             ? `"${lockoutReason}"`
-            : autoOptimize
-              ? `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`
-              : '"Auto-optimization paused. Manual control active."'}
+            : !autoOptimize
+              ? '"Auto-optimization paused. Manual control active."'
+              : isError
+                ? '"AI temporarily unavailable — using rule-based charging. Toggle off and on to retry."'
+                : isFallback
+                  ? '"AI recommendation expired — using rule-based charging until next update."'
+                  : `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`}
         </Typography>
       </Box>
 

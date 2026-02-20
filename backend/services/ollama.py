@@ -158,38 +158,82 @@ Respond ONLY in JSON (no preamble, no explanation outside JSON):
 {{"recommended_amps": <int 0-32>, "reasoning": "<1-2 sentences>", "confidence": "low|medium|high"}}"""
 
 
-async def call_ollama(prompt: str, trigger_reason: str = "scheduled") -> AIRecommendation:
+async def call_ollama(
+    prompt: str,
+    trigger_reason: str = "scheduled",
+    max_retries: int = 3,
+) -> AIRecommendation:
     """Call Ollama API and return parsed recommendation.
+
+    Retries up to max_retries times with exponential backoff on timeout
+    or connection errors. Non-retryable errors (4xx) raise immediately.
 
     Args:
         prompt: Full prompt string
         trigger_reason: Why this AI call was triggered
+        max_retries: Number of attempts before giving up
 
     Returns:
         AIRecommendation with parsed result
 
     Raises:
-        httpx.HTTPError: on network errors
-        TimeoutError: if Ollama doesn't respond within timeout
+        httpx.HTTPError: on non-retryable HTTP errors
+        TimeoutError: if all retries exhausted
     """
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
     settings = get_settings()
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            f"{settings.ollama_host}/api/generate",
-            json={
-                "model": settings.ollama_model,
-                "prompt": prompt,
-                "format": "json",
-                "stream": False,
-                "options": {
-                    "temperature": 0.1,
-                    "num_predict": 150,
-                },
-            },
-        )
-        resp.raise_for_status()
-        return AIRecommendation(resp.json(), trigger_reason)
+    last_error: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                resp = await client.post(
+                    f"{settings.ollama_host}/api/generate",
+                    json={
+                        "model": settings.ollama_model,
+                        "prompt": prompt,
+                        "format": "json",
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.1,
+                            "num_predict": 150,
+                        },
+                    },
+                )
+                resp.raise_for_status()
+                if attempt > 1:
+                    logger.info(f"Ollama succeeded on attempt {attempt}")
+                return AIRecommendation(resp.json(), trigger_reason)
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError) as e:
+            last_error = e
+            if attempt < max_retries:
+                wait = 2 ** attempt  # 2s, 4s
+                logger.warning(
+                    f"Ollama attempt {attempt}/{max_retries} failed "
+                    f"({type(e).__name__}), retrying in {wait}s..."
+                )
+                await asyncio.sleep(wait)
+            else:
+                logger.error(
+                    f"Ollama failed after {max_retries} attempts: "
+                    f"{type(e).__name__}: {e}"
+                )
+        except httpx.HTTPStatusError as e:
+            # 4xx/5xx — don't retry client errors, do retry server errors
+            if e.response.status_code >= 500 and attempt < max_retries:
+                wait = 2 ** attempt
+                logger.warning(
+                    f"Ollama attempt {attempt}/{max_retries} got {e.response.status_code}, "
+                    f"retrying in {wait}s..."
+                )
+                await asyncio.sleep(wait)
+                last_error = e
+            else:
+                raise
+
+    raise last_error or Exception("Ollama call failed after all retries")
 
 
 async def test_ollama_connection() -> tuple[bool, str]:

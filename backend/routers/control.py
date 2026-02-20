@@ -60,6 +60,11 @@ async def toggle_optimization(
     state = get_user_state(user_id)
     if state:
         state.ai_enabled = body.enabled
+        if body.enabled:
+            # Trigger immediate AI call on next control loop tick
+            state.last_ai_call = 0
+            state.ai_status = "active"
+            logger.info(f"[{user_id[:8]}] AI ON → will call Ollama on next tick")
 
     return {"ai_enabled": body.enabled}
 

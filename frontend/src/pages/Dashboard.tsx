@@ -77,6 +77,7 @@ export function Dashboard() {
         aiRecommendedAmps={status.ai_recommended_amps}
         aiConfidence={status.ai_confidence}
         aiReasoning={status.ai_reasoning}
+        aiStatus={status.ai_status}
         tessieEnabled={tessieEnabled}
         chargePortConnected={status.charge_port_connected}
       />
