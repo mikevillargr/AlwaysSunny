@@ -1,6 +1,6 @@
 import React from 'react'
 import { Box, Card, Typography, Grid } from '@mui/material'
-import { CheckCircle, AlertCircle } from 'lucide-react'
+import { CheckCircle, AlertCircle, PlugZap } from 'lucide-react'
 import type { Session } from '../types/api'
 
 interface SessionStatsProps {
@@ -13,6 +13,7 @@ interface SessionStatsProps {
   departureTime: string
   mode: string
   tessieEnabled?: boolean
+  chargePortConnected?: boolean
 }
 
 export function SessionStats({
@@ -25,6 +26,7 @@ export function SessionStats({
   departureTime,
   mode,
   tessieEnabled = true,
+  chargePortConnected = false,
 }: SessionStatsProps) {
   const solarPct = session?.solar_pct ?? 0
   const gridPct = 100 - solarPct
@@ -33,6 +35,60 @@ export function SessionStats({
   const safeAmps = teslaChargingAmps || 0
   const safeKw = teslaChargingKw || 0
   const dimmed = !tessieEnabled
+  const isCharging = chargePortConnected && session != null
+
+  if (!isCharging) {
+    return (
+      <Card
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 3,
+          height: '100%',
+          opacity: dimmed ? 0.45 : 0.6,
+          transition: 'opacity 0.2s ease',
+          minHeight: 320,
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 56,
+            height: 56,
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.04)',
+            mb: 2,
+          }}
+        >
+          <PlugZap size={28} color="#4a6382" />
+        </Box>
+        <Typography
+          variant="body1"
+          fontWeight="600"
+          color="text.secondary"
+          sx={{ mb: 0.5 }}
+        >
+          Not Charging
+        </Typography>
+        <Typography
+          variant="caption"
+          color="text.disabled"
+          sx={{ textAlign: 'center', maxWidth: 200 }}
+        >
+          {!tessieEnabled
+            ? 'Tessie connection is disabled'
+            : !chargePortConnected
+              ? 'Plug in your Tesla to start a charging session'
+              : 'Waiting for charging session to begin'}
+        </Typography>
+      </Card>
+    )
+  }
+
   return (
     <Card
       sx={{
@@ -55,6 +111,7 @@ export function SessionStats({
       >
         Active Session
       </Typography>
+
 
       {/* SoC Display */}
       <Box

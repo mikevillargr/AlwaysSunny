@@ -22,6 +22,14 @@ export function AIRecommendationStrip({
   chargePortConnected = false,
 }: AIRecommendationStripProps) {
   const aiToggleEnabled = tessieEnabled && chargePortConnected
+
+  // Determine lockout reason
+  const lockoutReason = !tessieEnabled
+    ? 'Enable Tessie connection to use AI optimization'
+    : !chargePortConnected
+      ? 'Plug in your Tesla to activate AI optimization'
+      : ''
+
   return (
     <Box
       sx={{
@@ -31,21 +39,27 @@ export function AIRecommendationStrip({
         px: 3,
         py: 2,
         borderRadius: 2,
-        bgcolor: autoOptimize
-          ? 'rgba(168, 85, 247, 0.07)'
-          : 'rgba(255,255,255,0.03)',
+        bgcolor: !aiToggleEnabled
+          ? 'rgba(255,255,255,0.02)'
+          : autoOptimize
+            ? 'rgba(168, 85, 247, 0.07)'
+            : 'rgba(255,255,255,0.03)',
         border: '1px solid',
-        borderColor: autoOptimize
-          ? 'rgba(168, 85, 247, 0.2)'
-          : 'rgba(255,255,255,0.08)',
+        borderColor: !aiToggleEnabled
+          ? 'rgba(255,255,255,0.05)'
+          : autoOptimize
+            ? 'rgba(168, 85, 247, 0.2)'
+            : 'rgba(255,255,255,0.08)',
         borderLeft: '3px solid',
-        borderLeftColor: autoOptimize ? '#a855f7' : '#2a3f57',
+        borderLeftColor: !aiToggleEnabled ? '#2a3f57' : autoOptimize ? '#a855f7' : '#2a3f57',
         mb: 3,
         flexWrap: {
           xs: 'wrap',
           md: 'nowrap',
         },
         transition: 'all 0.2s ease',
+        opacity: aiToggleEnabled ? 1 : 0.45,
+        pointerEvents: aiToggleEnabled ? 'auto' : 'none',
       }}
     >
       {/* Icon + Label */}
@@ -168,9 +182,11 @@ export function AIRecommendationStrip({
             lineHeight: 1.5,
           }}
         >
-          {autoOptimize
-            ? `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`
-            : '"Auto-optimization paused. Manual control active."'}
+          {!aiToggleEnabled
+            ? `"${lockoutReason}"`
+            : autoOptimize
+              ? `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`
+              : '"Auto-optimization paused. Manual control active."'}
         </Typography>
       </Box>
 

@@ -122,6 +122,7 @@ export function Dashboard() {
             departureTime={status.departure_time}
             mode={status.mode}
             tessieEnabled={tessieEnabled}
+            chargePortConnected={status.charge_port_connected}
           />
         </Grid>
         <Grid item xs={12} sm={4}>
