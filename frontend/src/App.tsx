@@ -106,6 +106,7 @@ export function App() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const userEmail = (user?.email || (user?.user_metadata as Record<string, string>)?.email || '').toLowerCase()
   const isAdmin = userEmail && ADMIN_EMAILS.includes(userEmail)
+  if (user) console.log('[Admin debug] user.email:', user.email, '| user_metadata:', user.user_metadata, '| resolved:', userEmail, '| isAdmin:', isAdmin)
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue)
   }
@@ -215,6 +216,14 @@ export function App() {
                 label="Settings"
                 iconPosition="start"
               />
+              {isAdmin && (
+                <Tab
+                  icon={<Shield size={20} />}
+                  label="Admin"
+                  iconPosition="start"
+                  sx={{ color: '#a855f7', '&.Mui-selected': { color: '#a855f7' } }}
+                />
+              )}
             </Tabs>
 
             {/* Sign Out */}
