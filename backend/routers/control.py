@@ -27,12 +27,19 @@ async def toggle_optimization(
     """Enable or disable AI optimization. When AI is turned off, immediately
     revert to default_charging_amps and send the command to Tessie."""
     user_id = user["id"]
+    settings = get_user_settings(user_id)
+
+    # Block Tessie commands when Tessie is disconnected
+    tessie_enabled = settings.get("tessie_enabled", "true").lower() == "true"
+    if not tessie_enabled:
+        upsert_user_setting(user_id, "ai_enabled", str(body.enabled).lower())
+        return {"ai_enabled": body.enabled}
+
     upsert_user_setting(user_id, "ai_enabled", str(body.enabled).lower())
 
     # When AI is turned OFF, immediately send default amps to Tessie
     if not body.enabled:
         creds = get_user_credentials(user_id) or {}
-        settings = get_user_settings(user_id)
         api_key = creds.get("tessie_api_key")
         vin = creds.get("tessie_vin")
         default_amps = int(settings.get("default_charging_amps", 8))
@@ -71,6 +78,13 @@ async def override_amps(
         raise HTTPException(status_code=400, detail="Amps must be between 0 and 32")
 
     user_id = user["id"]
+    settings = get_user_settings(user_id)
+
+    # Block Tessie commands when Tessie is disconnected
+    tessie_enabled = settings.get("tessie_enabled", "true").lower() == "true"
+    if not tessie_enabled:
+        raise HTTPException(status_code=409, detail="Tessie is disconnected. Enable Tessie to send commands.")
+
     creds = get_user_credentials(user_id) or {}
     api_key = creds.get("tessie_api_key")
     vin = creds.get("tessie_vin")

@@ -62,6 +62,13 @@ class StatusResponse(BaseModel):
     ai_confidence: str
     ai_trigger_reason: str
     ai_last_updated_secs: int
+    # Target SoC
+    target_soc: int = 80
+    # Tessie connection
+    tessie_enabled: bool = True
+    # Charging strategy
+    charging_strategy: str = "departure"
+    departure_time: str = ""
     # Session (null if no active session)
     session: Optional[Session] = None
     # Forecast

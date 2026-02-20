@@ -5,67 +5,58 @@ from fastapi import APIRouter, Depends
 from middleware.auth import get_current_user
 from models.database import StatusResponse, Session, Forecast, ForecastHour
 from scheduler.control_loop import get_user_state, build_status_response, register_user_loop
+from services.supabase_client import get_user_settings
 
 router = APIRouter()
 
 
 def get_sample_status(user_id: str) -> StatusResponse:
-    """Return sample data matching UI_SPEC.md for initial development."""
+    """Return initial data before control loop has real data.
+
+    Reads user settings from DB so persisted state (tessie_enabled, etc.)
+    is reflected immediately on page load.
+    """
+    settings = get_user_settings(user_id)
+    tessie_enabled = settings.get("tessie_enabled", "true").lower() == "true"
+    charging_strategy = settings.get("charging_strategy", "departure")
+    departure_time = settings.get("departure_time", "")
+    target_soc = int(settings.get("target_soc", 80))
+    ai_enabled = settings.get("ai_enabled", "false").lower() == "true"
+
     return StatusResponse(
-        mode="Solar Optimizing",
-        charger_status="charging_at_home",
-        home_detection_method="named_location",
-        solar_w=2840,
-        household_demand_w=880,
-        grid_import_w=120,
-        battery_soc=78,
-        battery_w=-200,
-        solax_data_age_secs=45,
-        tesla_soc=58,
-        tesla_charging_amps=12,
-        tesla_charging_kw=2.9,
-        charge_port_connected=True,
-        charging_state="Charging",
-        ai_enabled=True,
-        ai_status="active",
-        ai_recommended_amps=12,
-        ai_reasoning="Peak solar in 45 min — holding moderate rate, will increase to 18A at 11am",
-        ai_confidence="medium",
+        mode="Tessie Disconnected" if not tessie_enabled else "Waiting for data…",
+        charger_status="not_connected",
+        home_detection_method=None,
+        solar_w=0,
+        household_demand_w=0,
+        grid_import_w=0,
+        battery_soc=0,
+        battery_w=0,
+        solax_data_age_secs=0,
+        tesla_soc=0,
+        tesla_charging_amps=0,
+        tesla_charging_kw=0,
+        charge_port_connected=False,
+        charging_state="Stopped",
+        ai_enabled=ai_enabled,
+        ai_status="standby",
+        ai_recommended_amps=0,
+        ai_reasoning="",
+        ai_confidence="low",
         ai_trigger_reason="scheduled",
-        ai_last_updated_secs=120,
-        session=Session(
-            started_at="2026-02-20T09:14:00",
-            elapsed_mins=84,
-            kwh_added=8.4,
-            solar_kwh=7.1,
-            grid_kwh=1.3,
-            solar_pct=85,
-            saved_pesos=710,
-        ),
+        ai_last_updated_secs=0,
+        target_soc=target_soc,
+        tessie_enabled=tessie_enabled,
+        charging_strategy=charging_strategy,
+        departure_time=departure_time,
+        session=None,
         forecast=Forecast(
-            sunrise="05:58",
-            sunset="17:52",
-            peak_window_start="10:00",
-            peak_window_end="14:00",
-            hours_until_sunset=4.2,
-            hourly=[
-                ForecastHour(hour="06:00", irradiance_wm2=120, expected_yield_w=580, cloud_cover_pct=20),
-                ForecastHour(hour="07:00", irradiance_wm2=280, expected_yield_w=1360, cloud_cover_pct=25),
-                ForecastHour(hour="08:00", irradiance_wm2=480, expected_yield_w=2340, cloud_cover_pct=30),
-                ForecastHour(hour="09:00", irradiance_wm2=620, expected_yield_w=3020, cloud_cover_pct=35),
-                ForecastHour(hour="10:00", irradiance_wm2=710, expected_yield_w=3460, cloud_cover_pct=20),
-                ForecastHour(hour="11:00", irradiance_wm2=740, expected_yield_w=3610, cloud_cover_pct=15),
-                ForecastHour(hour="12:00", irradiance_wm2=730, expected_yield_w=3560, cloud_cover_pct=15),
-                ForecastHour(hour="13:00", irradiance_wm2=680, expected_yield_w=3310, cloud_cover_pct=20),
-                ForecastHour(hour="14:00", irradiance_wm2=560, expected_yield_w=2730, cloud_cover_pct=40),
-                ForecastHour(hour="15:00", irradiance_wm2=380, expected_yield_w=1850, cloud_cover_pct=55),
-                ForecastHour(hour="16:00", irradiance_wm2=210, expected_yield_w=1020, cloud_cover_pct=60),
-                ForecastHour(hour="17:00", irradiance_wm2=80, expected_yield_w=390, cloud_cover_pct=65),
-            ],
+            sunrise="", sunset="", peak_window_start="",
+            peak_window_end="", hours_until_sunset=0, hourly=[],
         ),
-        grid_budget_total_kwh=5.0,
-        grid_budget_used_kwh=2.1,
-        grid_budget_pct=42,
+        grid_budget_total_kwh=float(settings.get("daily_grid_budget_kwh", 0)),
+        grid_budget_used_kwh=0,
+        grid_budget_pct=0,
     )
 
 
