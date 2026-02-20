@@ -75,12 +75,22 @@ class SolarForecast:
             if h["irradiance_wm2"] > 0
         ]
 
+        # Current temperature from closest hour (works day and night)
+        now_hour_str = datetime.now().strftime("%H:00")
+        current_temp = 0.0
+        if self.hourly:
+            closest = min(self.hourly, key=lambda h: abs(
+                int(h["hour"].split(":")[0]) - int(now_hour_str.split(":")[0])
+            ))
+            current_temp = closest.get("temperature_c", 0)
+
         return {
             "sunrise": self.sunrise.split("T")[1][:5] if "T" in self.sunrise else self.sunrise,
             "sunset": self.sunset.split("T")[1][:5] if "T" in self.sunset else self.sunset,
             "peak_window_start": self.peak_window_start,
             "peak_window_end": self.peak_window_end,
             "hours_until_sunset": self.hours_until_sunset(),
+            "current_temperature_c": current_temp,
             "hourly": daylight_hours,
         }
 

@@ -8,13 +8,14 @@ interface GridBudgetWeatherProps {
 }
 
 export function GridBudgetWeather({ forecast }: GridBudgetWeatherProps) {
-  // Get current hour's data from forecast
+  // Get current hour's data from forecast (daylight hours only)
   const currentHour = new Date().getHours()
   const hourStr = `${String(currentHour).padStart(2, '0')}:00`
   const currentHourData = forecast.hourly.find((h) => h.hour === hourStr)
   const cloudCover = currentHourData?.cloud_cover_pct ?? 0
   const irradiance = currentHourData?.irradiance_wm2 ?? 0
-  const temperature = currentHourData?.temperature_c ?? 0
+  // Temperature: use backend-computed current_temperature_c (works day and night)
+  const temperature = forecast.current_temperature_c ?? currentHourData?.temperature_c ?? 0
   return (
     <Card
       sx={{

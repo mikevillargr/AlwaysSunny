@@ -63,6 +63,7 @@ export const SAMPLE_STATUS = {
     peak_window_start: '10:00',
     peak_window_end: '14:00',
     hours_until_sunset: 4.2,
+    current_temperature_c: 28.5,
     hourly: [
       { hour: '06:00', irradiance_wm2: 120, expected_yield_w: 580, cloud_cover_pct: 20 },
       { hour: '07:00', irradiance_wm2: 280, expected_yield_w: 1360, cloud_cover_pct: 25 },

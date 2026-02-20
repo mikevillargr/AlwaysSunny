@@ -61,6 +61,7 @@ export interface Forecast {
   peak_window_start: string
   peak_window_end: string
   hours_until_sunset: number
+  current_temperature_c: number
   hourly: ForecastHour[]
 }
 

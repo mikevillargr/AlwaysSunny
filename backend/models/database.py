@@ -23,6 +23,7 @@ class Forecast(BaseModel):
     peak_window_start: str
     peak_window_end: str
     hours_until_sunset: float
+    current_temperature_c: float = 0.0
     hourly: list[ForecastHour]
 
 
