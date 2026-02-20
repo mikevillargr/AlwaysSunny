@@ -497,7 +497,9 @@ async def _control_tick(user_id: str) -> None:
                 # AI has full control — use its recommendation as final setpoint
                 # Skip grid import limit throttling and rule-based strategies
                 # AI already receives max_grid_import_w, charging_strategy, and all constraints in prompt
-                final_amps = state.ai_recommendation.recommended_amps
+                raw_amps = state.ai_recommendation.recommended_amps
+                # Tesla minimum is 5A — clamp anything below to 0 (stop charging)
+                final_amps = raw_amps if raw_amps == 0 or raw_amps >= 5 else 0
                 state.mode = "AI Optimizing"
                 logger.debug(
                     f"[{state.user_id[:8]}] AI control: {final_amps}A "

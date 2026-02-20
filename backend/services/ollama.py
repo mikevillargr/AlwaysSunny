@@ -144,10 +144,12 @@ Trigger reason: {trigger_reason}
 - If strategy is "solar", prioritize zero or minimal grid draw even if target SoC may not be reached
 - Never recommend amps that would cause grid import to exceed {max_grid_import_w:.0f}W or exhaust budget_remaining_kwh
 - Each amp ≈ 240W at 240V circuit
-- The "Solar surplus" line above already calculates the max amps from solar alone — use it as your baseline
+- Available solar surplus = solar_yield - household_demand (this is what can power the car without grid)
 - Recommend the IDEAL target amps — do NOT limit yourself to small increments from current_amps. The system handles ramping.
 - Your recommendation should be AT LEAST the calculated max solar amps (shown above) when solar surplus is positive and SoC gap exists
 - Maximum charging rate is 32A — use it when solar surplus supports it
+- Tesla MINIMUM charging rate is 5A — never recommend 1, 2, 3, or 4A
+- If solar surplus only supports less than 5A (i.e. surplus < 1200W), recommend 0A to stop charging
 - 0A means stop charging entirely
 
 === REASONING MESSAGE INSTRUCTIONS ===

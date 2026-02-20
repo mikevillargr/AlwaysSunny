@@ -100,13 +100,14 @@ async def ai_pipeline_test(
     elapsed = round(time.time() - start, 2)
 
     # 3. Determine simulated Tessie command
+    # Tesla minimum is 5A — anything below that means stop charging
     amps = recommendation.recommended_amps
-    if amps == 0 or (1 <= amps < 5):
+    if amps < 5:
         tessie_action = "stop_charging"
         tessie_amps = 0
     else:
         tessie_action = "set_charging_amps"
-        tessie_amps = amps
+        tessie_amps = min(amps, 32)
 
     return {
         "pipeline": {
