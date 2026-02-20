@@ -175,7 +175,8 @@ class SessionTracker:
             )
 
             if should_end:
-                # Final update before ending
+                # Final update before ending — use latest rate
+                self.active.meralco_rate = meralco_rate
                 self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
                 final_data = self.active.to_db_final()
                 db_id = self.active.db_session_id
@@ -183,7 +184,8 @@ class SessionTracker:
                 self._prev_plugged_in = plugged_in
                 return "ended", {"db_session_id": db_id, **final_data}
 
-            # Session still active — update stats
+            # Session still active — update stats and keep rate current
+            self.active.meralco_rate = meralco_rate
             self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
             self._prev_plugged_in = plugged_in
             return "updated", self.active.to_api_dict()
