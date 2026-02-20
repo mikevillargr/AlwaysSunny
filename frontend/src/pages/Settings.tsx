@@ -33,7 +33,17 @@ export function Settings() {
     currency !== savedTariff.currency ||
     unit !== savedTariff.unit ||
     effectiveRate !== savedTariff.rate
-  const handleSaveTariff = () => {
+  const handleSaveTariff = async () => {
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          meralco_rate: parseFloat(effectiveRate) || 10.83,
+        }),
+      })
+    } catch (e) {
+      console.warn('[Settings] Failed to save tariff:', e)
+    }
     setSavedTariff({
       currency,
       unit,
@@ -140,7 +150,7 @@ export function Settings() {
     }
   }
 
-  // Load home location from backend on mount
+  // Load all settings from backend on mount
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -155,6 +165,28 @@ export function Settings() {
             setHomeLon(String(data.home_lon))
             setSavedLocation((prev) => ({ ...prev, lon: String(data.home_lon) }))
           }
+          // Electricity tariff
+          if (data.meralco_rate != null) {
+            const rateStr = String(data.meralco_rate)
+            setEffectiveRate(rateStr)
+            setSavedTariff((prev) => ({ ...prev, rate: rateStr }))
+          }
+          // Timezone
+          if (data.timezone) {
+            setTimezone(data.timezone)
+            setSavedTimezone(data.timezone)
+          }
+          // Notification prefs
+          if (data.notif_grid_budget != null) setNotifGridBudget(data.notif_grid_budget)
+          if (data.notif_session_complete != null) setNotifSessionComplete(data.notif_session_complete)
+          if (data.notif_ai_override != null) setNotifAIOverride(data.notif_ai_override)
+          if (data.notif_rate_reminder != null) setNotifRateReminder(data.notif_rate_reminder)
+          setSavedNotif({
+            gridBudget: data.notif_grid_budget ?? true,
+            sessionComplete: data.notif_session_complete ?? true,
+            aiOverride: data.notif_ai_override ?? false,
+            rateReminder: data.notif_rate_reminder ?? true,
+          })
         }
       } catch (e) {
         console.warn('[Settings] Failed to load settings:', e)
