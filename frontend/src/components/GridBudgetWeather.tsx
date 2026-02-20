@@ -1,20 +1,20 @@
 import React from 'react'
 import { Card, Box, Typography } from '@mui/material'
-import { CloudSun, Sun, Zap } from 'lucide-react'
+import { CloudSun, Thermometer, Zap } from 'lucide-react'
 import type { Forecast } from '../types/api'
 
 interface GridBudgetWeatherProps {
   forecast: Forecast
-  solarW: number
 }
 
-export function GridBudgetWeather({ forecast, solarW }: GridBudgetWeatherProps) {
+export function GridBudgetWeather({ forecast }: GridBudgetWeatherProps) {
   // Get current hour's data from forecast
   const currentHour = new Date().getHours()
   const hourStr = `${String(currentHour).padStart(2, '0')}:00`
   const currentHourData = forecast.hourly.find((h) => h.hour === hourStr)
   const cloudCover = currentHourData?.cloud_cover_pct ?? 0
   const irradiance = currentHourData?.irradiance_wm2 ?? 0
+  const temperature = currentHourData?.temperature_c ?? 0
   return (
     <Card
       sx={{
@@ -76,7 +76,7 @@ export function GridBudgetWeather({ forecast, solarW }: GridBudgetWeatherProps) 
           </Typography>
         </Box>
 
-        {/* UV Index */}
+        {/* Temperature */}
         <Box
           sx={{
             display: 'flex',
@@ -91,7 +91,7 @@ export function GridBudgetWeather({ forecast, solarW }: GridBudgetWeatherProps) 
               gap: 1.5,
             }}
           >
-            <Sun size={20} color="#f5c518" />
+            <Thermometer size={20} color="#f5c518" />
             <Typography
               variant="caption"
               color="text.secondary"
@@ -99,11 +99,11 @@ export function GridBudgetWeather({ forecast, solarW }: GridBudgetWeatherProps) 
                 letterSpacing: 0.5,
               }}
             >
-              SOLAR YIELD
+              TEMPERATURE
             </Typography>
           </Box>
           <Typography variant="h6" fontWeight="700" color="text.primary">
-            {Math.round(solarW).toLocaleString()}W
+            {Math.round(temperature)}°C
           </Typography>
         </Box>
 

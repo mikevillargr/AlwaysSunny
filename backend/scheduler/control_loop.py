@@ -555,6 +555,7 @@ async def _control_tick(user_id: str) -> None:
         target_soc=int(state.settings.get("target_soc", 100)),
         consume_energy_kwh=solax.consume_energy_kwh,
         meralco_rate=meralco_rate,
+        charge_energy_added=tesla.charge_energy_added,
     )
 
     if event == "started" and data:

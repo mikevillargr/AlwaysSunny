@@ -50,6 +50,7 @@ export interface ForecastHour {
   irradiance_wm2: number
   expected_yield_w: number
   cloud_cover_pct: number
+  temperature_c: number
 }
 
 export interface Forecast {

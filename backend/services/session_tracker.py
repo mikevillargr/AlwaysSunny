@@ -37,23 +37,22 @@ class ActiveSession:
         self,
         current_consume_energy_kwh: float,
         current_soc: int,
-        battery_capacity_kwh: float = 75.0,
+        charge_energy_added: float = 0.0,
     ) -> None:
         """Update session stats from latest Solax + Tesla data.
 
         Args:
             current_consume_energy_kwh: Solax cumulative grid import (consumeenergy)
             current_soc: Tesla battery_level %
-            battery_capacity_kwh: Tesla battery capacity (default 75 kWh)
+            charge_energy_added: Tesla charge_energy_added (kWh added this charge session)
         """
         self.current_soc = current_soc
 
         # Grid kWh used this session
         self.grid_kwh = max(0, current_consume_energy_kwh - self.start_grid_kwh)
 
-        # Total kWh added to Tesla
-        soc_delta = max(0, current_soc - self.start_soc)
-        self.kwh_added = (soc_delta / 100.0) * battery_capacity_kwh
+        # Total kWh added — use Tesla's own counter (much more accurate than SoC delta)
+        self.kwh_added = charge_energy_added if charge_energy_added > 0 else 0.0
 
         # Solar kWh = total added - grid used
         self.solar_kwh = max(0, self.kwh_added - self.grid_kwh)
@@ -131,6 +130,7 @@ class SessionTracker:
         target_soc: int,
         consume_energy_kwh: float,
         meralco_rate: float,
+        charge_energy_added: float = 0.0,
     ) -> tuple[str | None, dict | None]:
         """Called every control loop tick. Returns (event, data).
 
@@ -168,7 +168,7 @@ class SessionTracker:
 
             if should_end:
                 # Final update before ending
-                self.active.update(consume_energy_kwh, tesla_soc)
+                self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
                 final_data = self.active.to_db_final()
                 db_id = self.active.db_session_id
                 self.active = None
@@ -176,7 +176,7 @@ class SessionTracker:
                 return "ended", {"db_session_id": db_id, **final_data}
 
             # Session still active — update stats
-            self.active.update(consume_energy_kwh, tesla_soc)
+            self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
             self._prev_plugged_in = plugged_in
             return "updated", self.active.to_api_dict()
 

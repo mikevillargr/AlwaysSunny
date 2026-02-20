@@ -14,7 +14,7 @@ import { apiFetch } from '../lib/api'
 import type { SessionRecord } from '../types/api'
 
 function formatDuration(mins: number | null): string {
-  if (!mins) return '\u2014'
+  if (!mins) return '—'
   const h = Math.floor(mins / 60)
   const m = mins % 60
   return h > 0 ? `${h}h ${m}m` : `${m}m`
@@ -62,14 +62,14 @@ function SessionCard({ session }: { session: SessionRecord }) {
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {formatTime(session.started_at)}
-            {isActive ? ' \u2192 In progress' : ` \u2192 ${formatTime(session.ended_at)}`}
-            {' \u00B7 '}
+            {isActive ? ' → In progress' : ` → ${formatTime(session.ended_at)}`}
+            {' · '}
             {formatDuration(session.duration_mins)}
           </Typography>
         </Box>
         <Box sx={{ textAlign: 'right' }}>
           <Typography variant="h6" fontWeight="700" color="#22c55e">
-            \u20B1{Math.round(saved).toLocaleString()}
+            ₱{Math.round(saved).toLocaleString()}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Saved
@@ -119,7 +119,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
                 SoC Range
               </Typography>
               <Typography variant="body2" fontWeight="600" color="text.primary">
-                {session.start_soc ?? '\u2014'}% \u2192 {session.end_soc ?? (isActive ? 'charging' : '\u2014')}%
+                {session.start_soc ?? '—'}% → {session.end_soc ?? (isActive ? 'charging' : '—')}%
                 {session.target_soc ? ` (target ${session.target_soc}%)` : ''}
               </Typography>
             </Grid>
@@ -128,7 +128,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
                 Meralco Rate
               </Typography>
               <Typography variant="body2" fontWeight="600" color="text.primary">
-                \u20B1{session.meralco_rate?.toFixed(2) ?? '\u2014'}/kWh
+                ₱{session.meralco_rate?.toFixed(2) ?? '—'}/kWh
               </Typography>
             </Grid>
             <Grid item xs={6}>
@@ -144,7 +144,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
                 Grid Cost Avoided
               </Typography>
               <Typography variant="body2" fontWeight="600" color="#22c55e">
-                \u20B1{Math.round(saved).toLocaleString()}
+                ₱{Math.round(saved).toLocaleString()}
               </Typography>
             </Grid>
           </Grid>
@@ -212,7 +212,7 @@ export function History() {
 
   const summaryStats = [
     { label: 'All-time solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
-    { label: 'All-time saved', value: `\u20B1${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
+    { label: 'All-time saved', value: `₱${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
     { label: 'Avg solar subsidy', value: `${avgSubsidy}%`, color: '#f5c518' },
     { label: 'Sessions this month', value: `${thisMonthCount}` },
   ]

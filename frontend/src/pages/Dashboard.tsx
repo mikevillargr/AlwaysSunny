@@ -125,7 +125,6 @@ export function Dashboard() {
         <Grid item xs={12} sm={4}>
           <GridBudgetWeather
             forecast={status.forecast}
-            solarW={status.solar_w}
           />
         </Grid>
       </Grid>

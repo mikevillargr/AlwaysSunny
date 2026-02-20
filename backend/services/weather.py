@@ -25,6 +25,7 @@ class SolarForecast:
         times = hourly.get("time", [])
         irradiance = hourly.get("shortwave_radiation", [])
         cloud_cover = hourly.get("cloud_cover", [])
+        temperatures = hourly.get("temperature_2m", [])
 
         self.hourly = []
         for i, t in enumerate(times):
@@ -32,6 +33,7 @@ class SolarForecast:
                 "hour": t.split("T")[1][:5] if "T" in t else t,
                 "irradiance_wm2": irradiance[i] if i < len(irradiance) else 0,
                 "cloud_cover_pct": cloud_cover[i] if i < len(cloud_cover) else 0,
+                "temperature_c": temperatures[i] if i < len(temperatures) else 0,
             })
 
         # Calculate peak window (hours where irradiance > 70% of max)
@@ -67,6 +69,7 @@ class SolarForecast:
                 "irradiance_wm2": h["irradiance_wm2"],
                 "expected_yield_w": round(h["irradiance_wm2"] * efficiency_factor),
                 "cloud_cover_pct": h["cloud_cover_pct"],
+                "temperature_c": h.get("temperature_c", 0),
             }
             for h in self.hourly
             if h["irradiance_wm2"] > 0
@@ -112,7 +115,7 @@ async def fetch_forecast(lat: float, lon: float, timezone: str = "Asia/Manila") 
             params={
                 "latitude": lat,
                 "longitude": lon,
-                "hourly": "cloud_cover,shortwave_radiation",
+                "hourly": "cloud_cover,shortwave_radiation,temperature_2m",
                 "daily": "sunrise,sunset",
                 "timezone": timezone,
                 "forecast_days": 1,
