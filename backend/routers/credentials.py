@@ -71,3 +71,48 @@ async def save_credentials(
         upsert_user_credentials(user_id, merged)
 
     return {"status": "saved", "fields_updated": list(updates.keys())}
+
+
+@router.post("/credentials/test")
+async def test_credentials(user: dict = Depends(get_current_user)):
+    """Test all configured API connections and return status for each service."""
+    from services.solax import test_solax_connection
+    from services.tessie import test_tessie_connection
+    from services.ollama import test_ollama_connection
+
+    creds = get_user_credentials(user["id"]) or {}
+    results = {}
+
+    # Solax
+    if creds.get("solax_token_id") and creds.get("solax_dongle_sn"):
+        ok, detail = await test_solax_connection(creds["solax_token_id"], creds["solax_dongle_sn"])
+        results["solax"] = {"ok": ok, "detail": detail}
+    else:
+        results["solax"] = {"ok": False, "detail": "Not configured"}
+
+    # Tessie
+    if creds.get("tessie_api_key") and creds.get("tessie_vin"):
+        ok, detail = await test_tessie_connection(creds["tessie_api_key"], creds["tessie_vin"])
+        results["tessie"] = {"ok": ok, "detail": detail}
+    else:
+        results["tessie"] = {"ok": False, "detail": "Not configured"}
+
+    # Telegram — just check if credentials are present (no live test endpoint)
+    if creds.get("telegram_bot_token") and creds.get("telegram_chat_id"):
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"https://api.telegram.org/bot{creds['telegram_bot_token']}/getMe"
+                )
+                if resp.status_code == 200:
+                    bot_name = resp.json().get("result", {}).get("first_name", "Bot")
+                    results["telegram"] = {"ok": True, "detail": f"Connected — {bot_name}"}
+                else:
+                    results["telegram"] = {"ok": False, "detail": f"Invalid token (HTTP {resp.status_code})"}
+        except Exception as e:
+            results["telegram"] = {"ok": False, "detail": str(e)}
+    else:
+        results["telegram"] = {"ok": False, "detail": "Not configured"}
+
+    return results

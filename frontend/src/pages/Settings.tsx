@@ -57,28 +57,37 @@ export function Settings() {
   const [notifSessionComplete, setNotifSessionComplete] = useState(true)
   const [notifAIOverride, setNotifAIOverride] = useState(false)
   const [notifRateReminder, setNotifRateReminder] = useState(true)
-  const [telegramId, setTelegramId] = useState('')
   const [savedNotif, setSavedNotif] = useState({
     gridBudget: true,
     sessionComplete: true,
     aiOverride: false,
     rateReminder: true,
-    telegramId: '',
   })
   const [notifSaved, setNotifSaved] = useState(false)
   const notifDirty =
     notifGridBudget !== savedNotif.gridBudget ||
     notifSessionComplete !== savedNotif.sessionComplete ||
     notifAIOverride !== savedNotif.aiOverride ||
-    notifRateReminder !== savedNotif.rateReminder ||
-    telegramId !== savedNotif.telegramId
-  const handleSaveNotif = () => {
+    notifRateReminder !== savedNotif.rateReminder
+  const handleSaveNotif = async () => {
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          notif_grid_budget: notifGridBudget,
+          notif_session_complete: notifSessionComplete,
+          notif_ai_override: notifAIOverride,
+          notif_rate_reminder: notifRateReminder,
+        }),
+      })
+    } catch (e) {
+      console.warn('[Settings] Failed to save notification prefs:', e)
+    }
     setSavedNotif({
       gridBudget: notifGridBudget,
       sessionComplete: notifSessionComplete,
       aiOverride: notifAIOverride,
       rateReminder: notifRateReminder,
-      telegramId,
     })
     setNotifSaved(true)
     setTimeout(() => setNotifSaved(false), 2500)
@@ -96,6 +105,14 @@ export function Settings() {
   const [credsSaved, setCredsSaved] = useState(false)
   const [credsError, setCredsError] = useState<string | null>(null)
   const [credsLoaded, setCredsLoaded] = useState(false)
+
+  // Connection status per service (null = untested, true = ok, false = error)
+  const [connStatus, setConnStatus] = useState<Record<string, { ok: boolean; detail: string } | null>>({
+    solax: null,
+    tessie: null,
+    telegram: null,
+  })
+  const [testing, setTesting] = useState(false)
 
   // Load existing credentials on mount
   useEffect(() => {
@@ -141,6 +158,20 @@ export function Settings() {
       if (!res.ok) throw new Error(`Failed to save: ${res.status}`)
       setCredsSaved(true)
       setTimeout(() => setCredsSaved(false), 3000)
+
+      // Test connections after successful save
+      setTesting(true)
+      try {
+        const testRes = await apiFetch('/api/credentials/test', { method: 'POST' })
+        if (testRes.ok) {
+          const results = await testRes.json()
+          setConnStatus(results)
+        }
+      } catch (e) {
+        console.warn('[Settings] Connection test failed:', e)
+      } finally {
+        setTesting(false)
+      }
     } catch (e) {
       setCredsError(e instanceof Error ? e.message : 'Failed to save credentials')
     } finally {
@@ -489,17 +520,6 @@ export function Settings() {
           />
         </Box>
 
-        <TextField
-          label="Telegram Chat ID"
-          fullWidth
-          placeholder="123456789"
-          value={telegramId}
-          onChange={(e) => setTelegramId(e.target.value)}
-          sx={{
-            mb: 2,
-          }}
-        />
-
         <Box
           sx={{
             display: 'flex',
@@ -570,7 +590,31 @@ export function Settings() {
             <Typography variant="subtitle1" fontWeight="600">
               Solax Cloud
             </Typography>
+            {connStatus.solax && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: connStatus.solax.ok ? '#22c55e' : '#ef4444',
+                    boxShadow: connStatus.solax.ok ? '0 0 6px #22c55e' : '0 0 6px #ef4444',
+                  }}
+                />
+                <Typography variant="caption" color={connStatus.solax.ok ? '#22c55e' : '#ef4444'}>
+                  {connStatus.solax.ok ? 'Connected' : 'Error'}
+                </Typography>
+              </Box>
+            )}
+            {testing && !connStatus.solax && (
+              <CircularProgress size={14} sx={{ ml: 1, color: '#8da4be' }} />
+            )}
           </Box>
+          {connStatus.solax && (
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1, ml: 3.5 }}>
+              {connStatus.solax.detail}
+            </Typography>
+          )}
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
             Connects to your solar inverter for real-time energy data. Get credentials from solaxcloud.com.
           </Typography>
@@ -601,7 +645,31 @@ export function Settings() {
             <Typography variant="subtitle1" fontWeight="600">
               Tessie (Tesla)
             </Typography>
+            {connStatus.tessie && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: connStatus.tessie.ok ? '#22c55e' : '#ef4444',
+                    boxShadow: connStatus.tessie.ok ? '0 0 6px #22c55e' : '0 0 6px #ef4444',
+                  }}
+                />
+                <Typography variant="caption" color={connStatus.tessie.ok ? '#22c55e' : '#ef4444'}>
+                  {connStatus.tessie.ok ? 'Connected' : 'Error'}
+                </Typography>
+              </Box>
+            )}
+            {testing && !connStatus.tessie && (
+              <CircularProgress size={14} sx={{ ml: 1, color: '#8da4be' }} />
+            )}
           </Box>
+          {connStatus.tessie && (
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1, ml: 3.5 }}>
+              {connStatus.tessie.detail}
+            </Typography>
+          )}
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
             Required to read Tesla state and control charging. Get your API key at tessie.com → Settings → API.
           </Typography>
@@ -634,7 +702,31 @@ export function Settings() {
               Telegram Notifications
             </Typography>
             <Chip label="Optional" size="small" sx={{ fontSize: '0.65rem', height: 20, bgcolor: 'rgba(255,255,255,0.05)' }} />
+            {connStatus.telegram && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: connStatus.telegram.ok ? '#22c55e' : '#ef4444',
+                    boxShadow: connStatus.telegram.ok ? '0 0 6px #22c55e' : '0 0 6px #ef4444',
+                  }}
+                />
+                <Typography variant="caption" color={connStatus.telegram.ok ? '#22c55e' : '#ef4444'}>
+                  {connStatus.telegram.ok ? 'Connected' : 'Error'}
+                </Typography>
+              </Box>
+            )}
+            {testing && !connStatus.telegram && (
+              <CircularProgress size={14} sx={{ ml: 1, color: '#8da4be' }} />
+            )}
           </Box>
+          {connStatus.telegram && (
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1, ml: 3.5 }}>
+              {connStatus.telegram.detail}
+            </Typography>
+          )}
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
             Get push notifications for grid budget, session complete, and AI events. Create a bot via @BotFather on Telegram.
           </Typography>
