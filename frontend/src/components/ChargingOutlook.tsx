@@ -82,6 +82,7 @@ export function ChargingOutlook() {
     <Card
       sx={{
         p: 2.5,
+        mb: 2,
         cursor: 'pointer',
         transition: 'border-color 0.2s',
         border: expanded ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
