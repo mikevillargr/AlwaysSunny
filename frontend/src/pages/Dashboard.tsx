@@ -83,7 +83,7 @@ export function Dashboard() {
           <SessionStats
             session={status.session}
             teslaSoc={status.tesla_soc}
-            targetSoc={80}
+            targetSoc={status.target_soc}
             teslaChargingAmps={status.tesla_charging_amps}
             teslaChargingKw={status.tesla_charging_kw}
           />

@@ -42,6 +42,9 @@ class SolaxData:
         # Today's yield
         self.yield_today_kwh = float(result.get("yieldtoday") or 0)
 
+        # Cumulative grid import (kWh) — used for session grid tracking
+        self.consume_energy_kwh = float(result.get("consumeenergy") or 0)
+
         # Data freshness
         self.upload_time = result.get("uploadTime", "")
         self.inverter_status = int(result.get("inverterStatus") or 0)

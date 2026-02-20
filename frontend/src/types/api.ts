@@ -92,6 +92,8 @@ export interface StatusResponse {
   ai_confidence: AIConfidence
   ai_trigger_reason: AITriggerReason
   ai_last_updated_secs: number
+  // Target SoC from settings
+  target_soc: number
   // Session (null if no active session)
   session: Session | null
   // Forecast

@@ -161,11 +161,11 @@ async def _fetch_data(state: UserLoopState) -> bool:
         home_lon = state.location.longitude
         if home_lat and home_lon:
             from services.supabase_client import upsert_user_setting
-            upsert_user_setting(user_id, "home_lat", str(home_lat))
-            upsert_user_setting(user_id, "home_lon", str(home_lon))
+            upsert_user_setting(state.user_id, "home_lat", str(home_lat))
+            upsert_user_setting(state.user_id, "home_lon", str(home_lon))
             state.settings["home_lat"] = str(home_lat)
             state.settings["home_lon"] = str(home_lon)
-            logger.info(f"[{user_id[:8]}] Auto-set home location from Tesla GPS: {home_lat}, {home_lon}")
+            logger.info(f"[{state.user_id[:8]}] Auto-set home location from Tesla GPS: {home_lat}, {home_lon}")
 
     # Fetch weather (every 60 minutes)
     if now - state.last_weather_fetch > 3600 or state.forecast is None:
@@ -266,7 +266,13 @@ async def _control_tick(user_id: str) -> None:
     tesla = state.tesla
 
     # 2. Update buffers
-    available_w = solax.solar_w - solax.household_demand_w
+    # Per SPEC: available = solar - household + grid_import_limit (if budget remaining)
+    grid_budget = float(state.settings.get("daily_grid_budget_kwh", 0))
+    grid_import_limit_w = float(state.settings.get("max_grid_import_w", 0))
+    grid_used = state.session_tracker.active.grid_kwh if state.session_tracker.active else 0
+    grid_budget_remaining = max(0, grid_budget - grid_used) if grid_budget > 0 else float('inf')
+    grid_allowance_w = grid_import_limit_w if grid_budget_remaining > 0 else 0
+    available_w = solax.solar_w - solax.household_demand_w + grid_allowance_w
     state.solar_buffer.append(available_w)
     state.trend_buffer.append(solax.solar_w)
 
@@ -299,10 +305,8 @@ async def _control_tick(user_id: str) -> None:
         state.ai_status = "suspended_away"
         return
 
-    # Grid budget check
-    grid_budget = float(state.settings.get("daily_grid_budget_kwh", 5.0))
-    grid_used = state.session_tracker.active.grid_kwh if state.session_tracker.active else 0
-    if grid_used >= grid_budget and grid_budget > 0:
+    # Grid budget check (only enforce if budget is set > 0)
+    if grid_budget > 0 and grid_budget_remaining <= 0:
         state.mode = "Cutoff – Grid Budget Reached"
         # TODO: send Telegram notification
         try:
@@ -376,8 +380,8 @@ async def _control_tick(user_id: str) -> None:
         at_home=at_home,
         charging_state=tesla.charging_state,
         tesla_soc=tesla.battery_level,
-        target_soc=int(state.settings.get("target_soc", 80)),
-        consume_energy_kwh=solax.yield_today_kwh,  # Using yield as proxy
+        target_soc=int(state.settings.get("target_soc", 100)),
+        consume_energy_kwh=solax.consume_energy_kwh,
         meralco_rate=meralco_rate,
     )
 
@@ -448,6 +452,7 @@ def build_status_response(state: UserLoopState) -> dict:
             "sunrise": "", "sunset": "", "peak_window_start": "",
             "peak_window_end": "", "hours_until_sunset": 0, "hourly": [],
         },
+        "target_soc": int(state.settings.get("target_soc", 100)),
         "grid_budget_total_kwh": float(state.settings.get("daily_grid_budget_kwh", 5.0)),
         "grid_budget_used_kwh": session.grid_kwh if session else 0,
         "grid_budget_pct": round(

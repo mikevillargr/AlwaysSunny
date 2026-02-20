@@ -43,6 +43,7 @@ export const SAMPLE_STATUS = {
   ai_confidence: 'medium' as const,
   ai_trigger_reason: 'scheduled' as const,
   ai_last_updated_secs: 120,
+  target_soc: 80,
   session: {
     started_at: '2026-02-20T09:14:00',
     elapsed_mins: 84,
