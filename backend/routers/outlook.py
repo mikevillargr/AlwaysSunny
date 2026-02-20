@@ -66,12 +66,11 @@ def _build_outlook_prompt(state) -> str:
     # Situation assessment (pre-computed so the AI doesn't hallucinate)
     if is_night:
         situation = f"""SITUATION: It is nighttime (or past sunset). Solar yield is {solar_w:.0f}W — effectively zero.
-Any charging right now WILL draw entirely from the grid.
-Grid is currently importing {grid_import_w:.0f}W for household use alone."""
+The grid is already importing {grid_import_w:.0f}W for household use. Any EV charging will add on top of that — e.g. 5A charging adds ~1,200W to the existing {grid_import_w:.0f}W grid draw."""
     elif surplus_w < 700:
         situation = f"""SITUATION: Solar yield is low at {solar_w:.0f}W with {household_w:.0f}W household demand.
 Surplus of only {surplus_w:.0f}W — not enough to charge (minimum ~1,200W needed for 5A).
-Any charging right now would draw mostly from the grid."""
+The grid is already importing {grid_import_w:.0f}W. Any EV charging will add on top of that existing grid draw."""
     elif surplus_w < 1200:
         situation = f"""SITUATION: Solar yield is {solar_w:.0f}W with {household_w:.0f}W household demand.
 Surplus of {surplus_w:.0f}W — borderline. Can sustain 5A with minor grid draw (~{1200 - surplus_w:.0f}W from grid)."""
