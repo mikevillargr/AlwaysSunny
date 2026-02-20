@@ -159,8 +159,17 @@ The "reasoning" field is displayed directly to the user in the app banner. Write
 - Be 1-2 short sentences max. Plain English. No jargon.
 - Feel like a knowledgeable assistant explaining a decision, not a data readout.
 
-Good: "Solar at 2,840W and rising — pushing to 18A to capture the peak window before 2pm."
-Bad: "Recommended amps: 18. Solar yield high. Irradiance peak approaching."
+Good examples:
+- "Solar at 2,840W and rising — pushing to 18A to capture the peak window before 2pm."
+- "Solar surplus only 800W — below the 1,200W needed to charge. Pausing until solar recovers."
+- "Grid budget 92% used — throttling to 6A to stay within daily limit."
+- "Departure in 45 min with 18% SoC gap — drawing from grid at 14A to reach target."
+
+Bad examples:
+- "Solar surplus insufficient for minimum charging rate — pausing until conditions improve." (no numbers)
+- "Recommended amps: 18. Solar yield high. Irradiance peak approaching." (data readout, not narrative)
+
+Always include the specific watt or amp value that drove the decision.
 
 Respond ONLY in JSON (no preamble, no explanation outside JSON):
 {{"recommended_amps": <int 0-32>, "reasoning": "<1-2 sentences>", "confidence": "low|medium|high"}}"""
