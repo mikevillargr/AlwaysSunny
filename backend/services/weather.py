@@ -45,22 +45,28 @@ class SolarForecast:
         self.peak_window_start = self.peak_hours[0]["hour"] if self.peak_hours else ""
         self.peak_window_end = self.peak_hours[-1]["hour"] if self.peak_hours else ""
 
-    def hours_until_sunset(self) -> float:
+    def hours_until_sunset(self, timezone: str = "Asia/Manila") -> float:
         """Calculate hours remaining until sunset from now."""
         try:
-            now = datetime.now()
-            # Parse sunset time (format: "2026-02-20T17:52")
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        try:
+            now = datetime.now(ZoneInfo(timezone))
             sunset_dt = datetime.fromisoformat(self.sunset)
+            if sunset_dt.tzinfo is None:
+                sunset_dt = sunset_dt.replace(tzinfo=ZoneInfo(timezone))
             diff = (sunset_dt - now).total_seconds() / 3600
             return max(0, round(diff, 1))
         except (ValueError, TypeError):
             return 0.0
 
-    def to_api_response(self, efficiency_factor: float = 0.85) -> dict:
+    def to_api_response(self, efficiency_factor: float = 0.85, timezone: str = "Asia/Manila") -> dict:
         """Convert to the Forecast shape expected by the frontend.
 
         Args:
             efficiency_factor: Panel efficiency (default 0.85 = 85%)
+            timezone: IANA timezone for correct hour matching
         """
         # Filter to daylight hours only (irradiance > 0)
         daylight_hours = [
@@ -76,7 +82,11 @@ class SolarForecast:
         ]
 
         # Current temperature from closest hour (works day and night)
-        now_hour_str = datetime.now().strftime("%H:00")
+        try:
+            from zoneinfo import ZoneInfo
+            now_hour_str = datetime.now(ZoneInfo(timezone)).strftime("%H:00")
+        except Exception:
+            now_hour_str = datetime.now().strftime("%H:00")
         current_temp = 0.0
         if self.hourly:
             closest = min(self.hourly, key=lambda h: abs(
@@ -89,7 +99,7 @@ class SolarForecast:
             "sunset": self.sunset.split("T")[1][:5] if "T" in self.sunset else self.sunset,
             "peak_window_start": self.peak_window_start,
             "peak_window_end": self.peak_window_end,
-            "hours_until_sunset": self.hours_until_sunset(),
+            "hours_until_sunset": self.hours_until_sunset(timezone),
             "current_temperature_c": current_temp,
             "hourly": daylight_hours,
         }

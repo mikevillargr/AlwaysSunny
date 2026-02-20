@@ -52,7 +52,7 @@ def get_sample_status(user_id: str) -> StatusResponse:
         session=None,
         forecast=Forecast(
             sunrise="", sunset="", peak_window_start="",
-            peak_window_end="", hours_until_sunset=0, hourly=[],
+            peak_window_end="", hours_until_sunset=0, current_temperature_c=0, hourly=[],
         ),
         grid_budget_total_kwh=float(settings.get("daily_grid_budget_kwh", 0)),
         grid_budget_used_kwh=0,

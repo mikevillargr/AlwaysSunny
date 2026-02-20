@@ -758,9 +758,9 @@ def build_status_response(state: UserLoopState) -> dict:
         "ai_trigger_reason": ai.trigger_reason if ai else "scheduled",
         "ai_last_updated_secs": ai.age_secs if ai else 0,
         "session": session.to_api_dict() if session else None,
-        "forecast": forecast.to_api_response() if forecast else {
+        "forecast": forecast.to_api_response(timezone=state.settings.get("timezone", "Asia/Manila")) if forecast else {
             "sunrise": "", "sunset": "", "peak_window_start": "",
-            "peak_window_end": "", "hours_until_sunset": 0, "hourly": [],
+            "peak_window_end": "", "hours_until_sunset": 0, "current_temperature_c": 0, "hourly": [],
         },
         "target_soc": int(state.settings.get("target_soc", 100)),
         "tessie_enabled": state.settings.get("tessie_enabled", "true").lower() == "true",
