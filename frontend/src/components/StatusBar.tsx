@@ -43,12 +43,12 @@ export function StatusBar(props: StatusBarProps) {
     <Box
       sx={{
         display: 'flex',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         alignItems: 'center',
         width: '100%',
         mb: 3,
         flexWrap: 'wrap',
-        gap: 2,
+        gap: 1.5,
       }}
     >
       {/* Tessie Connection Kill Switch */}
