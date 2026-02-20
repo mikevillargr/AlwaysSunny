@@ -35,8 +35,8 @@ export function ChargingControls({
   gridBudgetPct,
 }: ChargingControlsProps) {
   const [targetSoC, setTargetSoC] = useState<number>(80)
-  const [gridBudget, setGridBudget] = useState<number>(gridBudgetTotalKwh)
-  const [gridImportLimit, setGridImportLimit] = useState<number>(500)
+  const [gridBudget, setGridBudget] = useState<number>(25)
+  const [gridImportLimit, setGridImportLimit] = useState<number>(4000)
   const [departureTime, setDepartureTime] = useState<string>('07:00')
   const [departurePeriod, setDeparturePeriod] = useState<'AM' | 'PM'>('AM')
   const [chargingMode, setChargingMode] = useState<'departure' | 'solar'>(
@@ -55,8 +55,26 @@ export function ChargingControls({
         if (res.ok) {
           const data = await res.json()
           if (data.target_soc) setTargetSoC(data.target_soc)
-          if (data.daily_grid_budget_kwh) setGridBudget(data.daily_grid_budget_kwh)
-          if (data.max_grid_import_w) setGridImportLimit(data.max_grid_import_w)
+          if (data.daily_grid_budget_kwh !== undefined) {
+            const budget = parseFloat(data.daily_grid_budget_kwh)
+            if (budget <= 0) {
+              setNoBudget(true)
+              setGridBudget(25) // default when re-enabling
+            } else {
+              setNoBudget(false)
+              setGridBudget(budget)
+            }
+          }
+          if (data.max_grid_import_w !== undefined) {
+            const limit = parseFloat(data.max_grid_import_w)
+            if (limit <= 0) {
+              setNoLimit(true)
+              setGridImportLimit(4000) // default when re-enabling
+            } else {
+              setNoLimit(false)
+              setGridImportLimit(limit)
+            }
+          }
           if (data.departure_time) setDepartureTime(data.departure_time)
           if (data.charging_strategy) setChargingMode(data.charging_strategy)
         }
@@ -514,7 +532,17 @@ export function ChargingControls({
             </Box>
             {/* No Budget toggle pill */}
             <Box
-              onClick={() => setNoBudget(!noBudget)}
+              onClick={() => {
+                const next = !noBudget
+                setNoBudget(next)
+                if (next) {
+                  // Disable budget → save 0
+                  saveSettingsNow({ daily_grid_budget_kwh: 0 })
+                } else {
+                  // Re-enable → save current value
+                  saveSettingsNow({ daily_grid_budget_kwh: gridBudget })
+                }
+              }}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -722,7 +750,17 @@ export function ChargingControls({
             </Box>
             {/* No Limit toggle pill */}
             <Box
-              onClick={() => setNoLimit(!noLimit)}
+              onClick={() => {
+                const next = !noLimit
+                setNoLimit(next)
+                if (next) {
+                  // Disable limit → save 0
+                  saveSettingsNow({ max_grid_import_w: 0 })
+                } else {
+                  // Re-enable → save current value
+                  saveSettingsNow({ max_grid_import_w: gridImportLimit })
+                }
+              }}
               sx={{
                 display: 'flex',
                 alignItems: 'center',

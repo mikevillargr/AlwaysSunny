@@ -214,7 +214,7 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
         return
 
     try:
-        grid_budget_total = float(state.settings.get("daily_grid_budget_kwh", 5.0))
+        grid_budget_total = float(state.settings.get("daily_grid_budget_kwh", 0))
         grid_used = state.session_tracker.active.grid_kwh if state.session_tracker.active else 0
         grid_remaining = max(0, grid_budget_total - grid_used)
 
@@ -254,7 +254,7 @@ async def _control_tick(user_id: str) -> None:
     now = time.time()
     state.creds = get_user_credentials(user_id) or {}
     state.settings = get_user_settings(user_id)
-    state.ai_enabled = state.settings.get("ai_enabled", "true").lower() == "true"
+    state.ai_enabled = state.settings.get("ai_enabled", "false").lower() == "true"
 
     # 1. Fetch external data
     data_ok = await _fetch_data(state)
@@ -265,112 +265,148 @@ async def _control_tick(user_id: str) -> None:
     solax = state.solax
     tesla = state.tesla
 
-    # 2. Update buffers
-    # Per SPEC: available = solar - household + grid_import_limit (if budget remaining)
-    grid_budget = float(state.settings.get("daily_grid_budget_kwh", 0))
-    grid_import_limit_w = float(state.settings.get("max_grid_import_w", 0))
-    grid_used = state.session_tracker.active.grid_kwh if state.session_tracker.active else 0
-    grid_budget_remaining = max(0, grid_budget - grid_used) if grid_budget > 0 else float('inf')
-    grid_allowance_w = grid_import_limit_w if grid_budget_remaining > 0 else 0
-    available_w = solax.solar_w - solax.household_demand_w + grid_allowance_w
-    state.solar_buffer.append(available_w)
+    # 2. Update trend buffers (always, for monitoring)
     state.trend_buffer.append(solax.solar_w)
 
-    # 3. Hard stops
-    # Night check
-    if state.forecast:
-        try:
-            now_time = datetime.now().strftime("%H:%M")
-            sunrise = state.forecast.sunrise.split("T")[-1][:5] if "T" in state.forecast.sunrise else state.forecast.sunrise
-            sunset = state.forecast.sunset.split("T")[-1][:5] if "T" in state.forecast.sunset else state.forecast.sunset
-            if now_time >= sunset or now_time < sunrise:
-                state.mode = "Suspended – Night"
-                state.ai_status = "suspended_night"
-                return
-        except (ValueError, IndexError):
-            pass
+    # 3. Hard stops — these are the ONLY conditions that should stop charging.
+    #    Each one returns early. If none fire, charging continues undisturbed.
 
-    # Plugged in check
+    # Plugged in check (must be first — everything else is irrelevant if unplugged)
     if not tesla.charge_port_connected:
         state.mode = "Suspended – Unplugged"
         return
 
     # Home detection
     at_home, charger_status, detection_method = _check_home_detection(state)
-    if not at_home and charger_status != "not_connected":
-        if charger_status == "charging_away":
-            state.mode = "Suspended – Charging Away"
-        else:
-            state.mode = "Suspended – Location Unknown"
+    if charger_status == "charging_away":
+        state.mode = "Suspended – Charging Away"
         state.ai_status = "suspended_away"
         return
+    # If location_unknown, assume home (don't block charging on missing GPS)
+    if charger_status == "location_unknown":
+        at_home = True
+        logger.debug(f"[{state.user_id[:8]}] Location unknown — assuming home")
 
-    # Grid budget check (only enforce if budget is set > 0)
+    # Grid budget check (only enforce if budget is explicitly set > 0)
+    grid_budget = float(state.settings.get("daily_grid_budget_kwh", 0))
+    grid_used = state.session_tracker.active.grid_kwh if state.session_tracker.active else 0
+    grid_budget_remaining = max(0, grid_budget - grid_used) if grid_budget > 0 else float('inf')
+
     if grid_budget > 0 and grid_budget_remaining <= 0:
         state.mode = "Cutoff – Grid Budget Reached"
-        # TODO: send Telegram notification
         try:
             await stop_charging(state.creds["tessie_api_key"], state.creds["tessie_vin"])
+            logger.info(f"[{state.user_id[:8]}] HARD STOP: Grid budget exhausted ({grid_used:.1f}/{grid_budget:.1f} kWh)")
         except Exception as e:
             logger.error(f"[{state.user_id[:8]}] Stop charging failed: {e}")
         return
 
-    # 4. Compute rule-based target amps
+    # --- Past this point, NO code path should call stop_charging(). ---
+
+    # 4. Determine final amps
+    #    Priority: manual_override > AI > rule-based throttling
+    api_key = state.creds.get("tessie_api_key")
+    vin = state.creds.get("tessie_vin")
     circuit_voltage = int(state.settings.get("circuit_voltage", 240))
-    smoothed = state.smoothed_available_w
-    target_amps = int(smoothed / circuit_voltage)
-    target_amps = max(0, min(32, target_amps))
+    grid_import_limit_w = float(state.settings.get("max_grid_import_w", 0))
+    manual_override = state.settings.get("manual_amps_override")
+    final_amps = None
 
-    if target_amps < 5 and target_amps > 0:
-        target_amps = 0  # Never trickle below Tesla minimum
+    # 4a. Manual override — user explicitly set amps via slider, respect it
+    if manual_override is not None and not state.ai_enabled:
+        final_amps = int(manual_override)
+        state.mode = "Manual Override"
+        logger.debug(f"[{state.user_id[:8]}] Manual override: {final_amps}A")
 
-    # 5. AI evaluation (if enabled)
-    if state.ai_enabled:
-        # Check if AI call is needed
+    # 4b. AI evaluation (if enabled and no manual override)
+    elif state.ai_enabled:
         ai_age = now - state.last_ai_call
         trigger = None
         if ai_age > 300:
             trigger = "scheduled"
         elif state.solar_trend != "stable" and ai_age > 90:
             trigger = "solar_shift"
-
         if trigger:
             await _maybe_call_ai(state, trigger)
 
-        # Apply AI setpoint if fresh
         if (
             state.ai_recommendation
             and state.ai_recommendation.is_fresh
             and state.ai_recommendation.recommended_amps >= 0
         ):
             final_amps = state.ai_recommendation.recommended_amps
-            state.mode = "Solar Optimizing"
+            state.mode = "AI Optimizing"
         else:
+            # AI enabled but no fresh recommendation — fall through to rule-based
+            state.ai_status = "fallback"
+
+    # 4c. Rule-based solar optimization (fallback)
+    if final_amps is None:
+        # If both grid budget and grid import limit are disabled (0),
+        # don't throttle — let Tesla charge at whatever it's doing.
+        if grid_budget <= 0 and grid_import_limit_w <= 0:
+            # No guardrails set — don't interfere with charging
+            state.mode = "Charging – No Limits"
+            final_amps = -1  # sentinel: don't send any command
+            logger.debug(f"[{state.user_id[:8]}] No budget/limit set — not interfering")
+        else:
+            # Grid import limit throttling:
+            # Adjust amps to keep grid import below the limit.
+            # If grid import > limit, reduce amps. If under, can increase.
+            grid_allowance_w = grid_import_limit_w if grid_budget_remaining > 0 else 0
+            available_w = solax.solar_w - solax.household_demand_w + grid_allowance_w
+            state.solar_buffer.append(available_w)
+            smoothed = state.smoothed_available_w
+            target_amps = int(smoothed / circuit_voltage)
+            target_amps = max(0, min(32, target_amps))
+
+            # If grid import limit is set, also do reactive throttling:
+            # compare current grid import to limit and adjust
+            if grid_import_limit_w > 0 and solax.grid_import_w > grid_import_limit_w:
+                # Over limit — reduce amps
+                excess_w = solax.grid_import_w - grid_import_limit_w
+                reduce_amps = max(1, int(excess_w / circuit_voltage))
+                current_amps = tesla.charger_actual_current
+                target_amps = max(0, current_amps - reduce_amps)
+                logger.info(
+                    f"[{state.user_id[:8]}] Grid import {solax.grid_import_w:.0f}W > limit {grid_import_limit_w:.0f}W "
+                    f"— reducing by {reduce_amps}A to {target_amps}A"
+                )
+
+            if target_amps < 5 and target_amps > 0:
+                target_amps = 5  # Tesla minimum is 5A, don't go below
+
             final_amps = target_amps
             state.mode = "Solar Optimizing"
-            if state.ai_status == "active":
-                state.ai_status = "fallback"
-    else:
-        final_amps = target_amps
-        state.mode = "Manual Override" if final_amps > 0 else "Suspended – Unplugged"
+            logger.debug(
+                f"[{state.user_id[:8]}] Rule-based: solar={solax.solar_w:.0f}W "
+                f"household={solax.household_demand_w:.0f}W grid_allow={grid_allowance_w:.0f}W "
+                f"→ {final_amps}A"
+            )
 
-    # 6. Send Tesla command (only if changed)
-    try:
-        api_key = state.creds["tessie_api_key"]
-        vin = state.creds["tessie_vin"]
-
-        if final_amps == 0 and tesla.charging_state == "Charging":
-            await stop_charging(api_key, vin)
-            state.last_amps_sent = 0
-        elif final_amps >= 5 and tesla.charging_state != "Charging":
-            await start_charging(api_key, vin)
-            await set_charging_amps(api_key, vin, final_amps)
-            state.last_amps_sent = final_amps
-        elif final_amps >= 5 and final_amps != state.last_amps_sent:
-            await set_charging_amps(api_key, vin, final_amps)
-            state.last_amps_sent = final_amps
-    except Exception as e:
-        logger.error(f"[{state.user_id[:8]}] Tesla command failed: {e}")
+    # 5. Send Tesla command (only if we have a definite setpoint and it changed)
+    if final_amps >= 0 and api_key and vin:
+        try:
+            if final_amps == 0 and tesla.charging_state == "Charging":
+                # Rule-based says 0 — but only stop if we're actively managing
+                # (i.e., grid budget or import limit is set)
+                if grid_budget > 0 or grid_import_limit_w > 0:
+                    await stop_charging(api_key, vin)
+                    state.last_amps_sent = 0
+                    logger.info(f"[{state.user_id[:8]}] Rule-based → stop (0A, limits active)")
+                else:
+                    logger.debug(f"[{state.user_id[:8]}] Rule-based 0A but no limits — not stopping")
+            elif final_amps >= 5 and tesla.charging_state != "Charging":
+                await start_charging(api_key, vin)
+                await set_charging_amps(api_key, vin, final_amps)
+                state.last_amps_sent = final_amps
+                logger.info(f"[{state.user_id[:8]}] Start charging at {final_amps}A")
+            elif final_amps >= 5 and final_amps != state.last_amps_sent:
+                await set_charging_amps(api_key, vin, final_amps)
+                state.last_amps_sent = final_amps
+                logger.info(f"[{state.user_id[:8]}] Set amps: {final_amps}A")
+        except Exception as e:
+            logger.error(f"[{state.user_id[:8]}] Tesla command failed: {e}")
 
     # 7. Session tracking
     meralco_rate = float(state.settings.get("meralco_rate", 10.83))
@@ -453,11 +489,11 @@ def build_status_response(state: UserLoopState) -> dict:
             "peak_window_end": "", "hours_until_sunset": 0, "hourly": [],
         },
         "target_soc": int(state.settings.get("target_soc", 100)),
-        "grid_budget_total_kwh": float(state.settings.get("daily_grid_budget_kwh", 5.0)),
+        "grid_budget_total_kwh": float(state.settings.get("daily_grid_budget_kwh", 0)),
         "grid_budget_used_kwh": session.grid_kwh if session else 0,
         "grid_budget_pct": round(
-            (session.grid_kwh / float(state.settings.get("daily_grid_budget_kwh", 5.0))) * 100, 1
-        ) if session and float(state.settings.get("daily_grid_budget_kwh", 5.0)) > 0 else 0,
+            (session.grid_kwh / float(state.settings.get("daily_grid_budget_kwh", 0))) * 100, 1
+        ) if session and float(state.settings.get("daily_grid_budget_kwh", 0)) > 0 else 0,
     }
 
 
