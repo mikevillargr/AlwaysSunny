@@ -12,6 +12,7 @@ interface SessionStatsProps {
   chargingStrategy: string
   departureTime: string
   mode: string
+  tessieEnabled?: boolean
 }
 
 export function SessionStats({
@@ -23,6 +24,7 @@ export function SessionStats({
   chargingStrategy,
   departureTime,
   mode,
+  tessieEnabled = true,
 }: SessionStatsProps) {
   const solarPct = session?.solar_pct ?? 0
   const gridPct = 100 - solarPct
@@ -30,6 +32,7 @@ export function SessionStats({
   const safeTargetSoc = targetSoc || 100
   const safeAmps = teslaChargingAmps || 0
   const safeKw = teslaChargingKw || 0
+  const dimmed = !tessieEnabled
   return (
     <Card
       sx={{
@@ -37,6 +40,8 @@ export function SessionStats({
         flexDirection: 'column',
         p: 3,
         height: '100%',
+        opacity: dimmed ? 0.45 : 1,
+        transition: 'opacity 0.2s ease',
       }}
     >
       <Typography

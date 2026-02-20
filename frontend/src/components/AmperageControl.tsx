@@ -7,12 +7,15 @@ interface AmperageControlProps {
   autoOptimize?: boolean
   teslaChargingAmps: number
   teslaChargingKw: number
+  tessieEnabled?: boolean
 }
 export function AmperageControl({
   autoOptimize = false,
   teslaChargingAmps,
   teslaChargingKw,
+  tessieEnabled = true,
 }: AmperageControlProps) {
+  const disabled = autoOptimize || !tessieEnabled
   const [localAmps, setLocalAmps] = useState<number>(teslaChargingAmps)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -47,13 +50,19 @@ export function AmperageControl({
       sx={{
         p: 2.5,
         mb: 3,
-        border: autoOptimize
-          ? '1px solid rgba(168, 85, 247, 0.25)'
-          : '1px solid #22c55e',
-        boxShadow: autoOptimize
-          ? '0 4px 20px rgba(168, 85, 247, 0.1)'
-          : '0 4px 20px rgba(34, 197, 94, 0.15)',
+        border: !tessieEnabled
+          ? '1px solid #2a3f57'
+          : autoOptimize
+            ? '1px solid rgba(168, 85, 247, 0.25)'
+            : '1px solid #22c55e',
+        boxShadow: !tessieEnabled
+          ? 'none'
+          : autoOptimize
+            ? '0 4px 20px rgba(168, 85, 247, 0.1)'
+            : '0 4px 20px rgba(34, 197, 94, 0.15)',
+        opacity: tessieEnabled ? 1 : 0.45,
         transition: 'all 0.2s ease',
+        pointerEvents: tessieEnabled ? 'auto' : 'none',
       }}
     >
       <Box
@@ -78,7 +87,7 @@ export function AmperageControl({
               mb: 0.5,
             }}
           >
-            <Car size={18} color={autoOptimize ? '#4a6382' : '#22c55e'} />
+            <Car size={18} color={disabled ? '#4a6382' : '#22c55e'} />
             <Typography
               variant="caption"
               color="text.secondary"
@@ -122,7 +131,7 @@ export function AmperageControl({
           <Typography
             variant="h4"
             fontWeight="700"
-            color={autoOptimize ? '#4a6382' : '#22c55e'}
+            color={disabled ? '#4a6382' : '#22c55e'}
             sx={{
               lineHeight: 1.2,
               transition: 'color 0.2s ease',
@@ -138,9 +147,11 @@ export function AmperageControl({
               mt: 0.25,
             }}
           >
-            {autoOptimize
-              ? 'Managed by AI optimizer'
-              : `${teslaAmperage * 230}W charging rate`}
+            {!tessieEnabled
+              ? 'Tessie disconnected'
+              : autoOptimize
+                ? 'Managed by AI optimizer'
+                : `${teslaAmperage * 230}W charging rate`}
           </Typography>
         </Box>
 
@@ -159,17 +170,17 @@ export function AmperageControl({
             max={32}
             step={1}
             valueLabelDisplay="auto"
-            disabled={autoOptimize}
+            disabled={disabled}
             sx={{
-              color: autoOptimize ? '#2a3f57' : '#22c55e',
-              opacity: autoOptimize ? 0.4 : 1,
+              color: disabled ? '#2a3f57' : '#22c55e',
+              opacity: disabled ? 0.4 : 1,
               transition: 'all 0.2s ease',
               '& .MuiSlider-thumb': {
                 width: 20,
                 height: 20,
                 boxShadow: autoOptimize
                   ? 'none'
-                  : '0 0 0 8px rgba(34, 197, 94, 0.16)',
+                  : disabled ? 'none' : '0 0 0 8px rgba(34, 197, 94, 0.16)',
               },
               '& .MuiSlider-rail': {
                 opacity: 0.3,

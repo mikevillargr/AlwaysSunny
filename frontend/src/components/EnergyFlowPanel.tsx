@@ -10,6 +10,7 @@ interface EnergyFlowPanelProps {
   teslaChargingKw: number
   chargingState: string
   chargePortConnected: boolean
+  tessieEnabled?: boolean
 }
 
 function fmt(w: number): string {
@@ -28,9 +29,12 @@ export function EnergyFlowPanel({
   teslaChargingKw,
   chargingState,
   chargePortConnected,
+  tessieEnabled = true,
 }: EnergyFlowPanelProps) {
   const teslaW = teslaChargingKw * 1000
   const isCharging = chargingState === 'Charging' && chargePortConnected
+  const teslaColor = tessieEnabled ? '#22c55e' : '#4a6382'
+  const teslaOpacity = tessieEnabled ? 1 : 0.4
   return (
     <Card
       sx={{
@@ -248,28 +252,29 @@ export function EnergyFlowPanel({
             {/* Home → Tesla line (upper right) */}
             <path
               d="M312 68 L428 38"
-              stroke="#22c55e"
+              stroke={teslaColor}
               strokeWidth="1.5"
               fill="none"
-              opacity="0.2"
+              opacity={tessieEnabled ? 0.2 : 0.1}
             />
             <path
               d="M312 68 L428 38"
-              stroke="#22c55e"
+              stroke={teslaColor}
               strokeWidth="1.5"
               fill="none"
-              className="flow-line"
-              markerEnd="url(#arrow-green)"
+              className={tessieEnabled ? 'flow-line' : undefined}
+              markerEnd={tessieEnabled ? 'url(#arrow-green)' : undefined}
+              opacity={teslaOpacity}
             />
             <text
               x="375"
               y="42"
               textAnchor="middle"
-              fill="#22c55e"
+              fill={teslaColor}
               fontSize="10"
-              opacity="0.8"
+              opacity={tessieEnabled ? 0.8 : 0.4}
             >
-              {fmt(teslaW)} · {teslaChargingAmps}A
+              {tessieEnabled ? `${fmt(teslaW)} · ${teslaChargingAmps}A` : '—'}
             </text>
 
             {/* Home → Grid line (lower right) */}
@@ -300,16 +305,16 @@ export function EnergyFlowPanel({
             </text>
 
             {/* Tesla — upper right (HERO) */}
-            <g transform="translate(470, 32)">
+            <g transform="translate(470, 32)" opacity={teslaOpacity}>
               <circle
-                className="pulsing-dot"
+                className={tessieEnabled ? 'pulsing-dot' : undefined}
                 cx="0"
                 cy="0"
                 r="38"
                 fill="#1e2d40"
-                stroke="#22c55e"
+                stroke={teslaColor}
                 strokeWidth="3"
-                filter="url(#glow-green)"
+                filter={tessieEnabled ? 'url(#glow-green)' : undefined}
               />
               <foreignObject x="-14" y="-14" width="28" height="28">
                 <div
@@ -320,14 +325,14 @@ export function EnergyFlowPanel({
                     height: '100%',
                   }}
                 >
-                  <Car size={22} color="#22c55e" />
+                  <Car size={22} color={teslaColor} />
                 </div>
               </foreignObject>
               <text
                 x="0"
                 y="-48"
                 textAnchor="middle"
-                fill="#22c55e"
+                fill={teslaColor}
                 fontSize="11"
                 letterSpacing="1"
                 fontWeight="bold"
@@ -338,11 +343,11 @@ export function EnergyFlowPanel({
                 x="0"
                 y="54"
                 textAnchor="middle"
-                fill="#22c55e"
+                fill={teslaColor}
                 fontSize="13"
                 fontWeight="bold"
               >
-                {isCharging ? 'CHARGING' : chargePortConnected ? 'PLUGGED IN' : 'OFFLINE'}
+                {!tessieEnabled ? 'DISCONNECTED' : isCharging ? 'CHARGING' : chargePortConnected ? 'PLUGGED IN' : 'OFFLINE'}
               </text>
             </g>
 
@@ -453,9 +458,9 @@ export function EnergyFlowPanel({
             },
             {
               label: 'CHARGING',
-              value: String(teslaChargingAmps),
-              unit: 'A',
-              color: '#22c55e',
+              value: tessieEnabled ? String(teslaChargingAmps) : '—',
+              unit: tessieEnabled ? 'A' : '',
+              color: teslaColor,
             },
           ].map((stat, i) => (
             <Box

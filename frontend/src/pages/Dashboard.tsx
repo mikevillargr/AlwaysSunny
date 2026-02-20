@@ -82,6 +82,7 @@ export function Dashboard() {
         autoOptimize={autoOptimize}
         teslaChargingAmps={status.tesla_charging_amps}
         teslaChargingKw={status.tesla_charging_kw}
+        tessieEnabled={tessieEnabled}
       />
       <ChargingControls
         teslaSoc={status.tesla_soc}
@@ -89,6 +90,7 @@ export function Dashboard() {
         gridBudgetTotalKwh={status.grid_budget_total_kwh}
         gridBudgetUsedKwh={status.grid_budget_used_kwh}
         gridBudgetPct={status.grid_budget_pct}
+        tessieEnabled={tessieEnabled}
       />
 
       <Grid container spacing={3} justifyContent="center">
@@ -101,6 +103,7 @@ export function Dashboard() {
             teslaChargingKw={status.tesla_charging_kw}
             chargingState={status.charging_state}
             chargePortConnected={status.charge_port_connected}
+            tessieEnabled={tessieEnabled}
           />
         </Grid>
         <Grid item xs={12} sm={4}>
@@ -113,6 +116,7 @@ export function Dashboard() {
             chargingStrategy={status.charging_strategy}
             departureTime={status.departure_time}
             mode={status.mode}
+            tessieEnabled={tessieEnabled}
           />
         </Grid>
         <Grid item xs={12} sm={4}>

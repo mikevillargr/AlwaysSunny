@@ -25,6 +25,7 @@ interface ChargingControlsProps {
   gridBudgetTotalKwh: number
   gridBudgetUsedKwh: number
   gridBudgetPct: number
+  tessieEnabled?: boolean
 }
 
 export function ChargingControls({
@@ -33,6 +34,7 @@ export function ChargingControls({
   gridBudgetTotalKwh,
   gridBudgetUsedKwh,
   gridBudgetPct,
+  tessieEnabled = true,
 }: ChargingControlsProps) {
   const [targetSoC, setTargetSoC] = useState<number>(80)
   const [gridBudget, setGridBudget] = useState<number>(25)
@@ -108,6 +110,10 @@ export function ChargingControls({
       sx={{
         p: 3,
         mb: 3,
+        opacity: tessieEnabled ? 1 : 0.45,
+        pointerEvents: tessieEnabled ? 'auto' : 'none',
+        transition: 'opacity 0.2s ease',
+        position: 'relative',
       }}
     >
       {/* Header */}
