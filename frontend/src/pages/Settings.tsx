@@ -216,7 +216,7 @@ export function Settings() {
   })
   const [testing, setTesting] = useState(false)
 
-  // Load existing credentials on mount
+  // Load existing credentials on mount, then auto-test connections
   useEffect(() => {
     async function loadCreds() {
       try {
@@ -236,6 +236,19 @@ export function Settings() {
         console.warn('[Settings] Failed to load credentials:', e)
       }
       setCredsLoaded(true)
+
+      // Auto-test connections after loading credentials
+      setTesting(true)
+      try {
+        const testRes = await apiFetch('/api/credentials/test', { method: 'POST' })
+        if (testRes.ok) {
+          setConnStatus(await testRes.json())
+        }
+      } catch (e) {
+        console.warn('[Settings] Auto connection test failed:', e)
+      } finally {
+        setTesting(false)
+      }
     }
     loadCreds()
   }, [])
