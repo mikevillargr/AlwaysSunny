@@ -126,6 +126,9 @@ export function Dashboard() {
           <GridBudgetWeather
             forecast={status.forecast}
             solarW={status.solar_w}
+            gridBudgetTotalKwh={status.grid_budget_total_kwh}
+            gridBudgetUsedKwh={status.grid_budget_used_kwh}
+            gridBudgetPct={status.grid_budget_pct}
           />
         </Grid>
       </Grid>
