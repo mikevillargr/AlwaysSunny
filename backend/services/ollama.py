@@ -8,7 +8,7 @@ import httpx
 
 from config import get_settings
 
-TIMEOUT = 30
+TIMEOUT = 90
 
 
 class AIRecommendation:
