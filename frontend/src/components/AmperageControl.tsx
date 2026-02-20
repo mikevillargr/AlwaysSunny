@@ -22,11 +22,14 @@ export function AmperageControl({
   }, [teslaChargingAmps])
 
   const handleSliderChange = (_: unknown, val: number | number[]) => {
+    setLocalAmps(val as number)
+  }
+
+  const handleSliderCommit = (_: unknown, val: number | number[]) => {
     const amps = val as number
     setLocalAmps(amps)
-    // Debounce the API call
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
+    // Send command immediately on slider release
+    ;(async () => {
       try {
         await apiFetch('/api/override/amps', {
           method: 'POST',
@@ -35,7 +38,7 @@ export function AmperageControl({
       } catch (e) {
         console.warn('[AmperageControl] Failed to set amps:', e)
       }
-    }, 500)
+    })()
   }
 
   const teslaAmperage = localAmps
@@ -151,6 +154,7 @@ export function AmperageControl({
           <Slider
             value={teslaAmperage}
             onChange={handleSliderChange}
+            onChangeCommitted={handleSliderCommit}
             min={0}
             max={32}
             step={1}

@@ -20,7 +20,10 @@ export function SessionStats({
 }: SessionStatsProps) {
   const solarPct = session?.solar_pct ?? 0
   const gridPct = 100 - solarPct
-  const socProgress = targetSoc > 0 ? Math.min(100, (teslaSoc / targetSoc) * 100) : 0
+  const safeTeslaSoc = teslaSoc || 0
+  const safeTargetSoc = targetSoc || 100
+  const safeAmps = teslaChargingAmps || 0
+  const safeKw = teslaChargingKw || 0
   return (
     <Card
       sx={{
@@ -57,10 +60,10 @@ export function SessionStats({
           }}
         >
           <Typography variant="h3" fontWeight="700" color="#f5c518">
-            {teslaSoc}%
+            {safeTeslaSoc}%
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            → {targetSoc}% target
+            → {safeTargetSoc}% target
           </Typography>
         </Box>
 
@@ -80,7 +83,7 @@ export function SessionStats({
               top: 0,
               left: 0,
               height: '100%',
-              width: `${Math.min(100, teslaSoc)}%`,
+              width: `${Math.min(100, safeTeslaSoc)}%`,
               bgcolor: '#3b82f6',
             }}
           />
@@ -90,7 +93,7 @@ export function SessionStats({
               top: 0,
               left: 0,
               height: '100%',
-              width: `${Math.min(100, teslaSoc) * (solarPct / 100)}%`,
+              width: `${Math.min(100, safeTeslaSoc) * (solarPct / 100)}%`,
               bgcolor: '#f5c518',
             }}
           />
@@ -172,12 +175,12 @@ export function SessionStats({
         />
         <Box>
           <Typography variant="body2" fontWeight="600" color="text.primary">
-            {teslaSoc >= targetSoc ? 'Target SoC reached!' : 'Charging in progress'}
+            {safeTeslaSoc >= safeTargetSoc ? 'Target SoC reached!' : 'Charging in progress'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {teslaSoc >= targetSoc
-              ? `${targetSoc}% target reached`
-              : `${targetSoc - teslaSoc}% remaining to ${targetSoc}% target`}
+            {safeTeslaSoc >= safeTargetSoc
+              ? `${safeTargetSoc}% target reached`
+              : `${safeTargetSoc - safeTeslaSoc}% remaining to ${safeTargetSoc}% target`}
           </Typography>
         </Box>
       </Box>
@@ -196,7 +199,7 @@ export function SessionStats({
             CHARGING AT
           </Typography>
           <Typography variant="body1" fontWeight="600">
-            {teslaChargingAmps}A · {teslaChargingKw.toFixed(1)} kW
+            {safeAmps}A · {safeKw.toFixed(1)} kW
           </Typography>
         </Grid>
         <Grid item xs={6}>

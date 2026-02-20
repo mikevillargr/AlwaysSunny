@@ -68,20 +68,23 @@ export function ChargingControls({
     loadSettings()
   }, [])
 
-  // Debounced save to backend
+  // Immediate save to backend (for slider commits, pill clicks)
+  const saveSettingsNow = useCallback(async (updates: Record<string, unknown>) => {
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify(updates),
+      })
+    } catch (e) {
+      console.warn('[ChargingControls] Failed to save:', e)
+    }
+  }, [])
+
+  // Debounced save for text inputs
   const saveSettings = useCallback((updates: Record<string, unknown>) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      try {
-        await apiFetch('/api/settings', {
-          method: 'POST',
-          body: JSON.stringify(updates),
-        })
-      } catch (e) {
-        console.warn('[ChargingControls] Failed to save:', e)
-      }
-    }, 800)
-  }, [])
+    debounceRef.current = setTimeout(() => saveSettingsNow(updates), 400)
+  }, [saveSettingsNow])
   return (
     <Card
       sx={{
@@ -184,7 +187,7 @@ export function ChargingControls({
                   key={key}
                   onClick={() => {
                     setChargingMode(key as 'departure' | 'solar')
-                    saveSettings({ charging_strategy: key })
+                    saveSettingsNow({ charging_strategy: key })
                   }}
                   sx={{
                     display: 'flex',
@@ -420,10 +423,11 @@ export function ChargingControls({
           </Typography>
           <Slider
             value={targetSoC}
-            onChange={(_, val) => {
+            onChange={(_, val) => setTargetSoC(val as number)}
+            onChangeCommitted={(_, val) => {
               const v = val as number
               setTargetSoC(v)
-              saveSettings({ target_soc: v })
+              saveSettingsNow({ target_soc: v })
             }}
             min={50}
             max={100}
