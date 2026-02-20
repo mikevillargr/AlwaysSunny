@@ -251,7 +251,19 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             session_solar_pct=session_solar_pct,
         )
 
-        state.ai_recommendation = await call_ollama(prompt, trigger_reason)
+        # Apply admin AI sensitivity settings if configured
+        ai_model = state.settings.get("ai_model") or None
+        ai_temp = state.settings.get("ai_temperature")
+        ai_tokens = state.settings.get("ai_max_tokens")
+        ai_retries = state.settings.get("ai_retry_attempts")
+        state.ai_recommendation = await call_ollama(
+            prompt,
+            trigger_reason,
+            max_retries=int(ai_retries) if ai_retries else 3,
+            model_override=ai_model,
+            temperature_override=float(ai_temp) if ai_temp else None,
+            max_tokens_override=int(ai_tokens) if ai_tokens else None,
+        )
         state.ai_status = "active"
         state.last_ai_call = now
         logger.info(

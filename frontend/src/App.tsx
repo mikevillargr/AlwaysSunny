@@ -27,12 +27,16 @@ import {
   Menu as MenuIcon,
   X,
   LogOut,
+  Shield,
 } from 'lucide-react'
 import { useAuth } from './contexts/AuthContext'
 import { Dashboard } from './pages/Dashboard'
 import { History } from './pages/History'
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
+import { Admin } from './pages/Admin'
+
+const ADMIN_EMAILS = ['mike.villar@gmail.com']
 // Create custom theme
 const theme = createTheme({
   palette: {
@@ -100,6 +104,7 @@ export function App() {
   const { user, loading, signOut } = useAuth()
   const [activeTab, setActiveTab] = useState(0)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase())
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue)
   }
@@ -116,6 +121,14 @@ export function App() {
       label: 'Settings',
       icon: <SettingsIcon size={20} />,
     },
+    ...(isAdmin
+      ? [
+          {
+            label: 'Admin',
+            icon: <Shield size={20} />,
+          },
+        ]
+      : []),
   ]
   if (loading) {
     return (
@@ -342,6 +355,7 @@ export function App() {
           {activeTab === 0 && <Dashboard />}
           {activeTab === 1 && <History />}
           {activeTab === 2 && <Settings />}
+          {activeTab === 3 && isAdmin && <Admin />}
         </Box>
       </Box>
     </ThemeProvider>

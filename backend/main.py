@@ -6,8 +6,6 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 from config import get_settings
 from routers import status, sessions, settings, control, health, credentials, debug
@@ -64,7 +62,3 @@ async def root():
     return {"app": "AlwaysSunny", "version": "0.1.0", "status": "running"}
 
 
-@app.get("/ai-test")
-async def ai_test_page():
-    """Serve the AI test bench page."""
-    return FileResponse("static/ai-test.html")

@@ -168,6 +168,9 @@ async def call_ollama(
     prompt: str,
     trigger_reason: str = "scheduled",
     max_retries: int = 3,
+    model_override: str | None = None,
+    temperature_override: float | None = None,
+    max_tokens_override: int | None = None,
 ) -> AIRecommendation:
     """Call Ollama API and return parsed recommendation.
 
@@ -178,6 +181,9 @@ async def call_ollama(
         prompt: Full prompt string
         trigger_reason: Why this AI call was triggered
         max_retries: Number of attempts before giving up
+        model_override: Override the default model (from admin settings)
+        temperature_override: Override the default temperature
+        max_tokens_override: Override the default max tokens
 
     Returns:
         AIRecommendation with parsed result
@@ -190,6 +196,9 @@ async def call_ollama(
     import logging
     logger = logging.getLogger(__name__)
     settings = get_settings()
+    model = model_override or settings.ollama_model
+    temperature = temperature_override if temperature_override is not None else 0.1
+    num_predict = max_tokens_override or 150
 
     last_error: Exception | None = None
     for attempt in range(1, max_retries + 1):
@@ -198,13 +207,13 @@ async def call_ollama(
                 resp = await client.post(
                     f"{settings.ollama_host}/api/generate",
                     json={
-                        "model": settings.ollama_model,
+                        "model": model,
                         "prompt": prompt,
                         "format": "json",
                         "stream": False,
                         "options": {
-                            "temperature": 0.1,
-                            "num_predict": 150,
+                            "temperature": temperature,
+                            "num_predict": num_predict,
                         },
                     },
                 )

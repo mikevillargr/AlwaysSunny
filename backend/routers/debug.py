@@ -1,15 +1,17 @@
-"""Debug endpoints for testing AI pipeline without a live charging session."""
+"""Admin endpoints for AI testing and sensitivity settings."""
 
 from __future__ import annotations
 
 import time
 import logging
 from pydantic import BaseModel
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
-from middleware.auth import get_current_user
+from middleware.auth import get_admin_user
 from config import get_settings
 from services.ollama import build_prompt, call_ollama
+from services.supabase_client import get_user_settings, upsert_user_setting
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ class AITestRequest(BaseModel):
 @router.post("/debug/ai-test")
 async def ai_pipeline_test(
     body: AITestRequest = AITestRequest(),
+    admin: dict = Depends(get_admin_user),
 ):
     """Full AI pipeline dry run with mock data.
 
@@ -133,3 +136,81 @@ async def ai_pipeline_test(
             "host": settings.ollama_host,
         },
     }
+
+
+# --- AI Sensitivity Settings ---
+
+AI_SETTING_KEYS = [
+    "ai_model",
+    "ai_temperature",
+    "ai_max_tokens",
+    "ai_min_solar_surplus_w",
+    "ai_min_amps",
+    "ai_max_amps",
+    "ai_call_interval_secs",
+    "ai_stale_threshold_secs",
+    "ai_retry_attempts",
+    "ai_prompt_style",
+]
+
+AI_SETTING_DEFAULTS = {
+    "ai_model": "qwen2.5:7b",
+    "ai_temperature": "0.1",
+    "ai_max_tokens": "150",
+    "ai_min_solar_surplus_w": "0",
+    "ai_min_amps": "5",
+    "ai_max_amps": "32",
+    "ai_call_interval_secs": "300",
+    "ai_stale_threshold_secs": "360",
+    "ai_retry_attempts": "3",
+    "ai_prompt_style": "default",
+}
+
+
+class AISensitivityUpdate(BaseModel):
+    """Partial update for AI sensitivity settings."""
+    ai_model: Optional[str] = None
+    ai_temperature: Optional[float] = None
+    ai_max_tokens: Optional[int] = None
+    ai_min_solar_surplus_w: Optional[float] = None
+    ai_min_amps: Optional[int] = None
+    ai_max_amps: Optional[int] = None
+    ai_call_interval_secs: Optional[int] = None
+    ai_stale_threshold_secs: Optional[int] = None
+    ai_retry_attempts: Optional[int] = None
+    ai_prompt_style: Optional[str] = None
+
+
+@router.get("/admin/ai-settings")
+async def get_ai_settings(
+    admin: dict = Depends(get_admin_user),
+):
+    """Get current AI sensitivity settings."""
+    user_id = admin["id"]
+    settings = get_user_settings(user_id)
+    result = {}
+    for key in AI_SETTING_KEYS:
+        result[key] = settings.get(key, AI_SETTING_DEFAULTS.get(key, ""))
+    return result
+
+
+@router.post("/admin/ai-settings")
+async def update_ai_settings(
+    body: AISensitivityUpdate,
+    admin: dict = Depends(get_admin_user),
+):
+    """Update AI sensitivity settings. Only provided fields are updated."""
+    user_id = admin["id"]
+    updated = {}
+    for key, value in body.dict(exclude_none=True).items():
+        upsert_user_setting(user_id, key, str(value))
+        updated[key] = str(value)
+    return {"updated": updated}
+
+
+@router.get("/admin/check")
+async def check_admin(
+    admin: dict = Depends(get_admin_user),
+):
+    """Check if the current user is an admin."""
+    return {"is_admin": True, "email": admin["email"]}

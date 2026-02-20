@@ -7,6 +7,10 @@ from services.supabase_client import get_supabase_admin
 
 security = HTTPBearer()
 
+ADMIN_EMAILS = [
+    "mike.villar@gmail.com",
+]
+
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -38,3 +42,18 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Authentication failed: {str(e)}",
         )
+
+
+async def get_admin_user(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Verify the authenticated user is an admin.
+
+    Raises 403 if user email is not in the admin whitelist.
+    """
+    if user.get("email", "").lower() not in [e.lower() for e in ADMIN_EMAILS]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return user
