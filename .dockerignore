@@ -1,0 +1,15 @@
+node_modules/
+venv/
+env/
+__pycache__/
+*.pyc
+.env
+.env.*
+.git/
+.DS_Store
+*.log
+frontend/dist/
+frontend/node_modules/
+backend/venv/
+backend/__pycache__/
+.windsurf/
