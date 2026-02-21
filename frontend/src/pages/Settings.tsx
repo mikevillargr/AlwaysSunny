@@ -19,6 +19,7 @@ import {
 } from '@mui/material'
 import { Check, Globe, Sun, Car, Bot, Send, MapPin, Zap } from 'lucide-react'
 import { apiFetch } from '../lib/api'
+import { CURRENCIES } from '../utils/currency'
 export function Settings() {
   const [currency, setCurrency] = useState('PHP')
   const [unit, setUnit] = useState('kWh')
@@ -417,13 +418,11 @@ export function Settings() {
               label="Currency"
               onChange={(e) => setCurrency(e.target.value)}
             >
-              <MenuItem value="PHP">₱ PHP</MenuItem>
-              <MenuItem value="USD">$ USD</MenuItem>
-              <MenuItem value="EUR">€ EUR</MenuItem>
-              <MenuItem value="GBP">£ GBP</MenuItem>
-              <MenuItem value="AUD">A$ AUD</MenuItem>
-              <MenuItem value="SGD">S$ SGD</MenuItem>
-              <MenuItem value="JPY">¥ JPY</MenuItem>
+              {CURRENCIES.map((c) => (
+                <MenuItem key={c.code} value={c.code}>
+                  {c.symbol} {c.code}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 

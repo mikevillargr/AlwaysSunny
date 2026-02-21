@@ -846,6 +846,7 @@ def build_status_response(state: UserLoopState) -> dict:
         "daily_solar_pct": round(
             max(0, min(100, ((state.daily_total_consumption_kwh - daily_grid_used) / state.daily_total_consumption_kwh) * 100)), 1
         ) if state.daily_total_consumption_kwh > 0 else 0,
+        "currency_code": state.settings.get("currency_code", "PHP"),
     }
 
 

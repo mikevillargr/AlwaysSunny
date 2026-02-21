@@ -12,17 +12,7 @@ import {
 import { ChevronDown, ChevronUp, Battery } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 import type { SessionRecord } from '../types/api'
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  PHP: '₱',
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  AUD: 'A$',
-  CAD: 'C$',
-  SGD: 'S$',
-}
+import { getCurrencySymbol } from '../utils/currency'
 
 function formatDuration(mins: number | null): string {
   if (!mins) return '—'
@@ -191,7 +181,7 @@ export function History() {
         if (res.ok) {
           const data = await res.json()
           const code = data.currency_code || 'PHP'
-          setCurrencySymbol(CURRENCY_SYMBOLS[code] || code + ' ')
+          setCurrencySymbol(getCurrencySymbol(code))
         }
       } catch { /* use default */ }
     }

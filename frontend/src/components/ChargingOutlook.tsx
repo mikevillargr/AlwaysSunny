@@ -9,9 +9,11 @@ interface OutlookData {
   generated_at: string
   cached: boolean
   pending?: boolean
+  error?: boolean
 }
 
 const POLL_INTERVAL = 60 * 60 * 1000 // 1 hour
+const ERROR_RETRY_INTERVAL = 30 * 1000 // 30s retry when AI is down
 
 /** Strip any JSON/bracket artifacts from the outlook text */
 function cleanText(raw: string): string {
@@ -48,23 +50,28 @@ export function ChargingOutlook() {
 
   const retryRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const fetchOutlook = useCallback(async () => {
+  const fetchOutlook = useCallback(async (force = false) => {
     setLoading(true)
     setError(false)
     try {
-      const resp = await apiFetch('/api/outlook')
+      const resp = await apiFetch(`/api/outlook${force ? '?force=true' : ''}`)
       if (resp.ok) {
         const data: OutlookData = await resp.json()
         setOutlook(data)
-        // Retry if backend data isn't ready yet
-        if (data.pending) {
-          retryRef.current = setTimeout(fetchOutlook, 15000)
+        if (data.error || (!data.generated_at && data.text)) {
+          // Backend returned an error state — schedule a retry
+          setError(true)
+          retryRef.current = setTimeout(() => fetchOutlook(), ERROR_RETRY_INTERVAL)
+        } else if (data.pending) {
+          retryRef.current = setTimeout(() => fetchOutlook(), 15000)
         }
       } else {
         setError(true)
+        retryRef.current = setTimeout(() => fetchOutlook(), ERROR_RETRY_INTERVAL)
       }
     } catch {
       setError(true)
+      retryRef.current = setTimeout(() => fetchOutlook(), ERROR_RETRY_INTERVAL)
     } finally {
       setLoading(false)
     }
@@ -73,7 +80,7 @@ export function ChargingOutlook() {
   // Fetch on mount and poll every hour
   useEffect(() => {
     fetchOutlook()
-    const interval = setInterval(fetchOutlook, POLL_INTERVAL)
+    const interval = setInterval(() => fetchOutlook(), POLL_INTERVAL)
     return () => {
       clearInterval(interval)
       if (retryRef.current) clearTimeout(retryRef.current)
@@ -150,9 +157,14 @@ export function ChargingOutlook() {
       <Collapse in={expanded}>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #2a3f57' }}>
           {error ? (
-            <Typography variant="body2" color="error" sx={{ fontSize: '0.9rem' }}>
-              Unable to generate outlook — AI service unavailable.
-            </Typography>
+            <Box>
+              <Typography variant="body2" color="error" sx={{ fontSize: '0.9rem' }}>
+                AI service temporarily unavailable — retrying automatically.
+              </Typography>
+              <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block' }}>
+                Will retry every 30 seconds. You can also tap Refresh.
+              </Typography>
+            </Box>
           ) : outlook?.text ? (
             <Typography
               variant="body1"
@@ -176,16 +188,8 @@ export function ChargingOutlook() {
               component="span"
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation()
-                ;(async () => {
-                  setLoading(true)
-                  setError(false)
-                  try {
-                    const resp = await apiFetch('/api/outlook?force=true')
-                    if (resp.ok) setOutlook(await resp.json())
-                    else setError(true)
-                  } catch { setError(true) }
-                  finally { setLoading(false) }
-                })()
+                if (retryRef.current) clearTimeout(retryRef.current)
+                fetchOutlook(true)
               }}
               sx={{
                 display: 'flex',

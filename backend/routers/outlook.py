@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 OUTLOOK_CACHE_SECS = 3600  # Refresh at most once per hour
+OUTLOOK_ERROR_RETRY_SECS = 120  # Retry after 2 min on failure (not 1 hour)
 
 
 def _build_outlook_prompt(state) -> str:
@@ -118,7 +119,7 @@ async def generate_outlook(state) -> tuple[str, str]:
         ai_model = state.settings.get("ai_model") or None
         raw_text = await call_ollama_text(
             prompt,
-            max_retries=2,
+            max_retries=3,
             model_override=ai_model,
             max_tokens_override=200,
         )
@@ -165,12 +166,27 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
         }
 
     now = time.time()
+    cache_ttl = OUTLOOK_CACHE_SECS
+
+    # Use shorter TTL if last attempt was an error (no generated_at means failure)
+    if state.outlook_text and not state.outlook_generated_at:
+        cache_ttl = OUTLOOK_ERROR_RETRY_SECS
+
     # Return cached if fresh and not forced
-    if not force and state.outlook_text and (now - state.last_outlook_fetch) < OUTLOOK_CACHE_SECS:
+    if not force and state.outlook_text and state.outlook_generated_at and (now - state.last_outlook_fetch) < cache_ttl:
         return {
             "text": state.outlook_text,
             "generated_at": state.outlook_generated_at,
             "cached": True,
+        }
+
+    # Skip re-generation if we recently failed (avoid hammering a dead service)
+    if not force and not state.outlook_generated_at and state.last_outlook_fetch and (now - state.last_outlook_fetch) < OUTLOOK_ERROR_RETRY_SECS:
+        return {
+            "text": state.outlook_text or "AI service temporarily unavailable. Retrying shortly.",
+            "generated_at": "",
+            "cached": True,
+            "error": True,
         }
 
     # Generate new outlook
@@ -183,4 +199,5 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
         "text": text,
         "generated_at": generated_at,
         "cached": False,
+        "error": not generated_at,
     }

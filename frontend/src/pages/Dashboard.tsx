@@ -129,6 +129,7 @@ export function Dashboard() {
             tessieEnabled={tessieEnabled}
             chargePortConnected={status.charge_port_connected}
             minutesToFullCharge={status.minutes_to_full_charge}
+            currencyCode={status.currency_code}
           />
         </Grid>
         <Grid item xs={12} sm={4}>

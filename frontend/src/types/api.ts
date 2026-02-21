@@ -121,6 +121,8 @@ export interface StatusResponse {
   // Solar subsidy
   live_solar_pct: number
   daily_solar_pct: number
+  // Currency
+  currency_code: string
 }
 
 // Session history types

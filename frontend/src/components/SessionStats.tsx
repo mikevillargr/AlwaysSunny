@@ -3,6 +3,7 @@ import { Box, Card, Typography, Grid } from '@mui/material'
 import { CheckCircle, AlertCircle, PlugZap } from 'lucide-react'
 import type { Session } from '../types/api'
 import { formatHour12 } from '../utils/constants'
+import { getCurrencySymbol } from '../utils/currency'
 
 interface SessionStatsProps {
   session: Session | null
@@ -16,6 +17,7 @@ interface SessionStatsProps {
   tessieEnabled?: boolean
   chargePortConnected?: boolean
   minutesToFullCharge?: number
+  currencyCode?: string
 }
 
 export function SessionStats({
@@ -30,6 +32,7 @@ export function SessionStats({
   tessieEnabled = true,
   chargePortConnected = false,
   minutesToFullCharge = 0,
+  currencyCode = 'PHP',
 }: SessionStatsProps) {
   const solarPct = session?.solar_pct ?? 0
   const gridPct = 100 - solarPct
@@ -338,7 +341,7 @@ export function SessionStats({
             SAVED
           </Typography>
           <Typography variant="body1" fontWeight="700" color="#22c55e">
-            {Math.round(session?.saved_amount ?? 0).toLocaleString()}
+            {getCurrencySymbol(currencyCode)}{Math.round(session?.saved_amount ?? 0).toLocaleString()}
           </Typography>
         </Grid>
       </Grid>

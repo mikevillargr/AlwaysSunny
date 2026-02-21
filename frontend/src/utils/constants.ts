@@ -84,6 +84,7 @@ export const SAMPLE_STATUS = {
   grid_budget_pct: 0,
   live_solar_pct: 72,
   daily_solar_pct: 65.42,
+  currency_code: 'PHP',
 }
 
 /**
