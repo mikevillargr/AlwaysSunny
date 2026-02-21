@@ -80,13 +80,22 @@ class StatusResponse(BaseModel):
     grid_budget_total_kwh: float
     grid_budget_used_kwh: float
     grid_budget_pct: float
-    # Solar subsidy
+    # Solar subsidy (Tesla-specific)
+    solar_to_tesla_w: float = 0
+    live_tesla_solar_pct: float = 0
+    daily_tesla_solar_pct: float = 0
+    # Legacy fields kept for compatibility
     live_solar_pct: float = 0
     daily_solar_pct: float = 0
     # Currency
     currency_code: str = "PHP"
     # AI service health
     ollama_healthy: bool = False
+    # Forecast location
+    forecast_location_set: bool = False
+    forecast_location_lat: Optional[float] = None
+    forecast_location_lon: Optional[float] = None
+    forecast_location_name: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +131,8 @@ class SettingsUpdate(BaseModel):
     electricity_rate: Optional[float] = None
     home_lat: Optional[float] = None
     home_lon: Optional[float] = None
+    geofence_radius_m: Optional[int] = None
+    location_name: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     timezone: Optional[str] = None
     notif_grid_budget: Optional[bool] = None
@@ -146,6 +157,8 @@ class SettingsResponse(BaseModel):
     electricity_rate_updated_at: Optional[str] = None
     home_lat: Optional[float] = None
     home_lon: Optional[float] = None
+    geofence_radius_m: int = 100
+    location_name: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     timezone: str = "Asia/Manila"
     notif_grid_budget: bool = True

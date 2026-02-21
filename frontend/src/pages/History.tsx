@@ -8,11 +8,27 @@ import {
   Tab,
   Collapse,
   CircularProgress,
+  Divider,
 } from '@mui/material'
-import { ChevronDown, ChevronUp, Battery } from 'lucide-react'
+import { ChevronDown, ChevronUp, Battery, Sun, Zap, Activity } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 import type { SessionRecord } from '../types/api'
 import { getCurrencySymbol } from '../utils/currency'
+
+interface SessionDetails {
+  session_id: number
+  snapshot_count: number
+  avg_solar_w?: number
+  peak_solar_w?: number
+  min_solar_w?: number
+  avg_grid_w?: number
+  avg_household_w?: number
+  avg_battery_w?: number
+  avg_charging_amps?: number
+  peak_charging_amps?: number
+  soc_start?: number
+  soc_end?: number
+}
 
 function formatDuration(mins: number | null): string {
   if (!mins) return '—'
@@ -37,6 +53,8 @@ function formatDate(iso: string | null): string {
 
 function SessionCard({ session, currencySymbol }: { session: SessionRecord; currencySymbol: string }) {
   const [expanded, setExpanded] = useState(false)
+  const [details, setDetails] = useState<SessionDetails | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
   const solarPct = session.solar_pct ?? 0
   const kwh = session.kwh_added ?? 0
   const solar = session.solar_kwh ?? 0
@@ -44,10 +62,24 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
   const saved = session.saved_amount ?? 0
   const isActive = !session.ended_at
 
+  const handleToggle = () => {
+    const willExpand = !expanded
+    setExpanded(willExpand)
+    if (willExpand && !details && !detailsLoading) {
+      setDetailsLoading(true)
+      apiFetch(`/api/sessions/${session.id}/details`)
+        .then(async (res) => {
+          if (res.ok) setDetails(await res.json())
+        })
+        .catch(() => {})
+        .finally(() => setDetailsLoading(false))
+    }
+  }
+
   return (
     <Card
       sx={{ mb: 2, p: 2, cursor: 'pointer' }}
-      onClick={() => setExpanded(!expanded)}
+      onClick={handleToggle}
     >
       <Box
         sx={{
@@ -84,7 +116,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
             Charged: {kwh.toFixed(1)} kWh
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {Math.round(solarPct)}% Solar
+            {Math.round(solarPct)}% Solar Charged
           </Typography>
         </Box>
 
@@ -134,7 +166,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
             </Grid>
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Solar Subsidy
+                Tesla Solar Subsidy
               </Typography>
               <Typography variant="body2" fontWeight="600" color="#f5c518">
                 {Math.round(solarPct)}%
@@ -154,6 +186,91 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
               </Typography>
             </Grid>
           </Grid>
+
+          {/* Enriched Session Data from Snapshots */}
+          {detailsLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={18} sx={{ color: '#4a6382' }} />
+            </Box>
+          )}
+          {details && details.snapshot_count > 0 && (
+            <>
+              <Divider sx={{ my: 2, borderColor: '#1a2a3d' }} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <Activity size={14} color="#a855f7" />
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Session Conditions ({details.snapshot_count} snapshots)
+                </Typography>
+              </Box>
+              <Grid container spacing={2}>
+                <Grid item xs={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                    <Sun size={12} color="#f5c518" />
+                    <Typography variant="caption" color="text.secondary">Avg Solar</Typography>
+                  </Box>
+                  <Typography variant="body2" fontWeight="600" color="#f5c518">
+                    {details.avg_solar_w?.toLocaleString()}W
+                  </Typography>
+                </Grid>
+                <Grid item xs={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                    <Sun size={12} color="#f59e0b" />
+                    <Typography variant="caption" color="text.secondary">Peak Solar</Typography>
+                  </Box>
+                  <Typography variant="body2" fontWeight="600" color="#f59e0b">
+                    {details.peak_solar_w?.toLocaleString()}W
+                  </Typography>
+                </Grid>
+                <Grid item xs={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                    <Sun size={12} color="#6b8299" />
+                    <Typography variant="caption" color="text.secondary">Min Solar</Typography>
+                  </Box>
+                  <Typography variant="body2" fontWeight="600" color="text.secondary">
+                    {details.min_solar_w?.toLocaleString()}W
+                  </Typography>
+                </Grid>
+                <Grid item xs={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                    <Zap size={12} color="#3b82f6" />
+                    <Typography variant="caption" color="text.secondary">Avg Grid</Typography>
+                  </Box>
+                  <Typography variant="body2" fontWeight="600" color="#3b82f6">
+                    {details.avg_grid_w?.toLocaleString()}W
+                  </Typography>
+                </Grid>
+                <Grid item xs={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                    <Zap size={12} color="#8da4be" />
+                    <Typography variant="caption" color="text.secondary">Avg Household</Typography>
+                  </Box>
+                  <Typography variant="body2" fontWeight="600" color="text.secondary">
+                    {details.avg_household_w?.toLocaleString()}W
+                  </Typography>
+                </Grid>
+                <Grid item xs={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                    <Activity size={12} color="#22c55e" />
+                    <Typography variant="caption" color="text.secondary">Avg Amps</Typography>
+                  </Box>
+                  <Typography variant="body2" fontWeight="600" color="#22c55e">
+                    {details.avg_charging_amps}A
+                    <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+                      (peak {details.peak_charging_amps}A)
+                    </Typography>
+                  </Typography>
+                </Grid>
+              </Grid>
+            </>
+          )}
+          {details && details.snapshot_count === 0 && (
+            <>
+              <Divider sx={{ my: 2, borderColor: '#1a2a3d' }} />
+              <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                No energy snapshots recorded for this session.
+              </Typography>
+            </>
+          )}
         </Box>
       </Collapse>
 
@@ -234,7 +351,7 @@ export function History() {
   const summaryStats = [
     { label: 'All-time solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
     { label: 'All-time saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
-    { label: 'Avg solar subsidy', value: `${avgSubsidy}%`, color: '#f5c518' },
+    { label: 'Avg Tesla solar %', value: `${avgSubsidy}%`, color: '#f5c518' },
     { label: 'Sessions this month', value: `${thisMonthCount}` },
   ]
 

@@ -207,7 +207,9 @@ def _check_home_detection(state: UserLoopState) -> tuple[bool, str, str | None]:
     home_lat = float(state.settings.get("home_lat", 0))
     home_lon = float(state.settings.get("home_lon", 0))
     if home_lat and home_lon and state.tesla:
-        if is_at_home_gps(state.tesla.latitude, state.tesla.longitude, home_lat, home_lon):
+        radius_m = float(state.settings.get("geofence_radius_m", 100))
+        radius_km = radius_m / 1000.0
+        if is_at_home_gps(state.tesla.latitude, state.tesla.longitude, home_lat, home_lon, radius_km=radius_km):
             return True, "charging_at_home", "gps_proximity"
         else:
             return False, "charging_away", "gps_proximity"
@@ -216,9 +218,12 @@ def _check_home_detection(state: UserLoopState) -> tuple[bool, str, str | None]:
 
 
 async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
-    """Call Ollama AI if conditions are met (min 90s gap)."""
+    """Call Ollama AI if conditions are met (respects ai_call_interval_secs)."""
     now = time.time()
-    if now - state.last_ai_call < 90:
+    call_interval = int(state.settings.get("ai_call_interval_secs", 300))
+    # Minimum 60s to prevent hammering, even if admin sets lower
+    call_interval = max(60, call_interval)
+    if now - state.last_ai_call < call_interval:
         return
 
     if not state.solax or not state.tesla or not state.forecast:
@@ -277,6 +282,8 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             estimated_available_w=est_w,
             forecasted_irradiance_wm2=est_irr,
             efficiency_coeff=est_eff,
+            solar_to_tesla_w=_calc_solar_to_tesla_w(state),
+            live_tesla_solar_pct=_calc_live_tesla_solar_pct(state),
         )
 
         # Apply admin AI sensitivity settings if configured
@@ -292,6 +299,20 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             temperature_override=float(ai_temp) if ai_temp else None,
             max_tokens_override=int(ai_tokens) if ai_tokens else None,
         )
+
+        # Apply admin amp clamps if configured
+        ai_min = int(state.settings.get("ai_min_amps", 5))
+        ai_max = int(state.settings.get("ai_max_amps", 32))
+        raw_amps = state.ai_recommendation.recommended_amps
+        if raw_amps > 0:  # don't clamp 0 (stop charging)
+            clamped = max(ai_min, min(ai_max, raw_amps))
+            if clamped != raw_amps:
+                logger.info(
+                    f"[{state.user_id[:8]}] AI amps clamped: {raw_amps}A → {clamped}A "
+                    f"(admin range {ai_min}-{ai_max}A)"
+                )
+                state.ai_recommendation.recommended_amps = clamped
+
         state.ai_status = "active"
         state.last_ai_call = now
         logger.info(
@@ -555,8 +576,9 @@ async def _control_tick(user_id: str) -> None:
                     except (ValueError, IndexError):
                         pass
             
-            # Stale recommendation: > 6 min old
-            if ai_age > 360:
+            # Stale recommendation check (configurable via admin settings)
+            stale_threshold = int(state.settings.get("ai_stale_threshold_secs", 360))
+            if ai_age > stale_threshold:
                 trigger = "stale"
             
             if trigger:
@@ -799,6 +821,29 @@ def _get_ollama_health() -> bool:
         return False
 
 
+def _calc_solar_to_tesla_w(state: "UserLoopState") -> float:
+    """Calculate watts of solar currently going to Tesla."""
+    if not state.solax or not state.tesla:
+        return 0.0
+    solar_w = state.solax.solar_w
+    household_w = state.solax.household_demand_w
+    tesla_w = state.tesla.charging_kw * 1000
+    surplus = max(0, solar_w - household_w)
+    return min(surplus, tesla_w)
+
+
+def _calc_live_tesla_solar_pct(state: "UserLoopState") -> float:
+    """Calculate live Tesla solar subsidy percentage."""
+    if not state.solax or not state.tesla:
+        return 0.0
+    tesla_w = state.tesla.charging_kw * 1000
+    is_charging = state.tesla.charging_state == "Charging" and state.tesla.charge_port_connected
+    if not is_charging or tesla_w <= 0:
+        return 0.0
+    solar_to_tesla = _calc_solar_to_tesla_w(state)
+    return round(min(100, (solar_to_tesla / tesla_w) * 100), 1)
+
+
 def build_status_response(state: UserLoopState) -> dict:
     """Build the /api/status response from in-memory state."""
     solax = state.solax
@@ -810,6 +855,28 @@ def build_status_response(state: UserLoopState) -> dict:
     at_home, charger_status, detection_method = _check_home_detection(state)
 
     daily_grid_used = max(0, (solax.consume_energy_kwh if solax else 0) - state.daily_grid_start_kwh) if state.daily_grid_date else 0
+
+    # Tesla-specific solar subsidy calculation
+    solar_w = solax.solar_w if solax else 0
+    household_w = solax.household_demand_w if solax else 0
+    tesla_w = (tesla.charging_kw * 1000) if tesla else 0
+    is_charging = tesla and tesla.charging_state == "Charging" and tesla.charge_port_connected
+
+    # Watts of solar currently going to Tesla
+    solar_to_tesla_w = max(0, solar_w - household_w)
+    solar_to_tesla_w = min(solar_to_tesla_w, tesla_w)
+
+    # Live Tesla solar subsidy %
+    if is_charging and tesla_w > 0:
+        live_tesla_solar_pct = round(min(100, (solar_to_tesla_w / tesla_w) * 100), 1)
+    else:
+        live_tesla_solar_pct = 0.0
+
+    # Daily Tesla solar subsidy % — derive from active session + today's completed sessions
+    daily_tesla_solar_pct = 0.0
+    if session:
+        daily_tesla_solar_pct = session.solar_pct
+    # TODO: aggregate from today's completed sessions if needed
 
     return {
         "mode": state.mode,
@@ -848,14 +915,17 @@ def build_status_response(state: UserLoopState) -> dict:
         "grid_budget_pct": round(
             (daily_grid_used / float(state.settings.get("daily_grid_budget_kwh", 0))) * 100, 1
         ) if float(state.settings.get("daily_grid_budget_kwh", 0)) > 0 else 0,
-        "live_solar_pct": round(
-            min(100, (solax.solar_w / solax.household_demand_w) * 100), 1
-        ) if solax and solax.household_demand_w > 0 else 0,
-        "daily_solar_pct": round(
-            max(0, min(100, ((state.daily_total_consumption_kwh - daily_grid_used) / state.daily_total_consumption_kwh) * 100)), 1
-        ) if state.daily_total_consumption_kwh > 0 else 0,
+        "solar_to_tesla_w": round(solar_to_tesla_w, 0),
+        "live_tesla_solar_pct": live_tesla_solar_pct,
+        "daily_tesla_solar_pct": round(daily_tesla_solar_pct, 1),
+        "live_solar_pct": live_tesla_solar_pct,
+        "daily_solar_pct": round(daily_tesla_solar_pct, 1),
         "currency_code": state.settings.get("currency_code", "PHP"),
         "ollama_healthy": _get_ollama_health(),
+        "forecast_location_set": bool(float(state.settings.get("home_lat", 0)) and float(state.settings.get("home_lon", 0))),
+        "forecast_location_lat": float(state.settings.get("home_lat", 0)) or None,
+        "forecast_location_lon": float(state.settings.get("home_lon", 0)) or None,
+        "forecast_location_name": state.settings.get("location_name") or None,
     }
 
 

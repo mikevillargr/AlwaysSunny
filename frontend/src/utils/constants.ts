@@ -82,10 +82,17 @@ export const SAMPLE_STATUS = {
   grid_budget_total_kwh: 5.0,
   grid_budget_used_kwh: 2.1,
   grid_budget_pct: 0,
+  solar_to_tesla_w: 2800,
+  live_tesla_solar_pct: 72,
+  daily_tesla_solar_pct: 65.42,
   live_solar_pct: 72,
   daily_solar_pct: 65.42,
   currency_code: 'PHP',
   ollama_healthy: true,
+  forecast_location_set: true,
+  forecast_location_lat: 14.5995,
+  forecast_location_lon: 120.9842,
+  forecast_location_name: null,
 }
 
 /**

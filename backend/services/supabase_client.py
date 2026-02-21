@@ -55,6 +55,21 @@ def save_snapshot(user_id: str, snapshot: dict) -> None:
     sb.table("snapshots").insert(snapshot).execute()
 
 
+def get_session_snapshots(user_id: str, started_at: str, ended_at: str | None) -> list[dict]:
+    """Fetch snapshots within a session's time range."""
+    sb = get_supabase_admin()
+    query = (
+        sb.table("snapshots")
+        .select("solar_w, grid_w, battery_soc, battery_w, household_w, tesla_amps, tesla_soc, ai_recommended_amps, mode, timestamp")
+        .eq("user_id", user_id)
+        .gte("timestamp", started_at)
+    )
+    if ended_at:
+        query = query.lte("timestamp", ended_at)
+    result = query.order("timestamp").execute()
+    return result.data
+
+
 # ---------------------------------------------------------------------------
 # Session helpers
 # ---------------------------------------------------------------------------

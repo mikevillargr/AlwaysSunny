@@ -177,6 +177,7 @@ async def ai_pipeline_test(
 
 AI_SETTING_KEYS = [
     "ai_model",
+    "ai_fallback_model",
     "ai_temperature",
     "ai_max_tokens",
     "ai_min_solar_surplus_w",
@@ -190,6 +191,7 @@ AI_SETTING_KEYS = [
 
 AI_SETTING_DEFAULTS = {
     "ai_model": "qwen2.5:7b",
+    "ai_fallback_model": "qwen2.5:1.5b",
     "ai_temperature": "0.1",
     "ai_max_tokens": "150",
     "ai_min_solar_surplus_w": "0",
@@ -205,6 +207,7 @@ AI_SETTING_DEFAULTS = {
 class AISensitivityUpdate(BaseModel):
     """Partial update for AI sensitivity settings."""
     ai_model: Optional[str] = None
+    ai_fallback_model: Optional[str] = None
     ai_temperature: Optional[float] = None
     ai_max_tokens: Optional[int] = None
     ai_min_solar_surplus_w: Optional[float] = None

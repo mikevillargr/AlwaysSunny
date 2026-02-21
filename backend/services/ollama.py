@@ -94,8 +94,11 @@ def _build_actual_conditions(
     estimated_available_w: float,
     forecasted_irradiance_wm2: float,
     efficiency_coeff: float,
+    solar_to_tesla_w: float = 0.0,
+    live_tesla_solar_pct: float = 0.0,
 ) -> str:
     """Build the ACTUAL CONDITIONS block, conditional on inverter setup."""
+    tesla_solar_line = f"\nSolar going to Tesla now: {solar_to_tesla_w:.0f}W ({live_tesla_solar_pct:.0f}%)"
     if not has_home_battery and panel_capacity_w > 0 and estimated_available_w > 0:
         return f"""Solar yield (actual measured): {solar_w:.0f}W
 Solar trend (last 5 min): {solar_trend}  [rising | stable | falling]
@@ -113,13 +116,13 @@ Estimated panel capacity available now: {estimated_available_w:.0f}W
     if "rising" or "stable", trust the estimate fully.
 Household demand: {household_w:.0f}W
 Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
-Solar surplus (estimated available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw"""
+Solar surplus (estimated available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw{tesla_solar_line}"""
     else:
         return f"""Solar yield: {solar_w:.0f}W  |  Trend (last 5 min): {solar_trend}
 Household demand: {household_w:.0f}W
 Solar surplus (available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw
 Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
-Home battery SoC: {battery_soc}%  |  Battery power: {battery_w:.0f}W"""
+Home battery SoC: {battery_soc}%  |  Battery power: {battery_w:.0f}W{tesla_solar_line}"""
 
 
 def _build_reasoning_guidance(has_home_battery: bool, has_net_metering: bool) -> str:
@@ -186,6 +189,8 @@ def build_prompt(
     estimated_available_w: float = 0.0,
     forecasted_irradiance_wm2: float = 0.0,
     efficiency_coeff: float = 0.0,
+    solar_to_tesla_w: float = 0.0,
+    live_tesla_solar_pct: float = 0.0,
 ) -> str:
     """Build the AI prompt with full context for optimization decision."""
     # --- Pre-compute goal-aware metrics ---
@@ -329,13 +334,13 @@ Net metering enabled: {has_net_metering}
 Installed panel capacity: {panel_capacity_w}W (0 = unknown)
 
 === ACTUAL CONDITIONS (Solax — ground truth) ===
-{_build_actual_conditions(solar_w, solar_trend, household_w, grid_import_w, battery_soc, battery_w, solar_surplus_w, max_solar_amps, has_home_battery, panel_capacity_w, estimated_available_w, forecasted_irradiance_wm2, efficiency_coeff)}
+{_build_actual_conditions(solar_w, solar_trend, household_w, grid_import_w, battery_soc, battery_w, solar_surplus_w, max_solar_amps, has_home_battery, panel_capacity_w, estimated_available_w, forecasted_irradiance_wm2, efficiency_coeff, solar_to_tesla_w, live_tesla_solar_pct)}
 
 === SOLAR FORECAST (Open-Meteo) ===
 {irradiance_curve}
 
 === SESSION CONTEXT ===
-Session elapsed: {session_elapsed_mins} min  |  Solar subsidy: {session_solar_pct:.0f}%
+Session elapsed: {session_elapsed_mins} min  |  Tesla solar subsidy this session: {session_solar_pct:.0f}%
 Trigger reason: {trigger_reason}
 
 === DECISION RULES ===

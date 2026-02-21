@@ -6,9 +6,11 @@ import { formatHour12 } from '../utils/constants'
 
 interface GridBudgetWeatherProps {
   forecast: Forecast
+  forecastLocationSet?: boolean
+  forecastLocationName?: string | null
 }
 
-export function GridBudgetWeather({ forecast }: GridBudgetWeatherProps) {
+export function GridBudgetWeather({ forecast, forecastLocationSet, forecastLocationName }: GridBudgetWeatherProps) {
   // Get current hour's data from forecast (daylight hours only)
   const currentHour = new Date().getHours()
   const hourStr = `${String(currentHour).padStart(2, '0')}:00`
@@ -28,17 +30,23 @@ export function GridBudgetWeather({ forecast }: GridBudgetWeatherProps) {
       }}
       className="items-center justify-start"
     >
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-          mb: 2,
-        }}
-      >
-        Solar Conditions
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+          }}
+        >
+          Solar Conditions
+        </Typography>
+        {forecastLocationSet === false && (
+          <Typography variant="caption" sx={{ color: '#f59e0b', fontSize: '0.6rem' }}>
+            ⚠ No location set
+          </Typography>
+        )}
+      </Box>
 
       <Box
         sx={{
@@ -184,7 +192,9 @@ export function GridBudgetWeather({ forecast }: GridBudgetWeatherProps) {
             fontSize: '0.65rem',
           }}
         >
-          Source: Open-Meteo
+          {forecastLocationSet
+            ? `${forecastLocationName || 'Your Solar Charging Location'} · Open-Meteo`
+            : 'Set your Solar Charging Location in Settings · Open-Meteo'}
         </Typography>
       </Box>
     </Card>
