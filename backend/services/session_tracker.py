@@ -114,7 +114,7 @@ class SessionTracker:
         Args:
             db_session: The active session row from the DB.
             start_grid_kwh: The persisted consumeenergy value at session start.
-            electricity_rate: Current Meralco rate.
+            electricity_rate: Current electricity rate.
         """
         if not db_session or self._recovered:
             return
