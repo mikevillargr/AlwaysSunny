@@ -18,6 +18,7 @@ class ActiveSession:
     target_soc: int = 80
     start_grid_kwh: float = 0.0  # cumulative consumeenergy at session start
     electricity_rate: float = 10.83
+    subsidy_calculation_method: str = "estimated"
 
     # Live-updated each tick
     kwh_added: float = 0.0
@@ -90,6 +91,7 @@ class ActiveSession:
             "saved_amount": round(self.saved_amount, 2),
             "electricity_rate": self.electricity_rate,
             "end_soc": self.current_soc,
+            "subsidy_calculation_method": self.subsidy_calculation_method,
         }
 
 
@@ -139,6 +141,7 @@ class SessionTracker:
         consume_energy_kwh: float,
         electricity_rate: float,
         charge_energy_added: float = 0.0,
+        subsidy_calculation_method: str = "estimated",
     ) -> tuple[str | None, dict | None]:
         """Called every control loop tick. Returns (event, data).
 
@@ -154,6 +157,7 @@ class SessionTracker:
                 target_soc=target_soc,
                 start_grid_kwh=consume_energy_kwh,
                 electricity_rate=electricity_rate,
+                subsidy_calculation_method=subsidy_calculation_method,
             )
             self._prev_plugged_in = True
             return "started", {

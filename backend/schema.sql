@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     electricity_rate REAL,
     start_soc INTEGER,
     end_soc INTEGER,
-    target_soc INTEGER
+    target_soc INTEGER,
+    subsidy_calculation_method TEXT DEFAULT 'estimated'
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_started

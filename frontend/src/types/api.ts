@@ -135,6 +135,7 @@ export interface SessionRecord {
   start_soc: number
   end_soc: number
   target_soc: number
+  subsidy_calculation_method: string
 }
 
 // Settings types

@@ -742,6 +742,7 @@ async def _control_tick(user_id: str) -> None:
         consume_energy_kwh=solax.consume_energy_kwh,
         electricity_rate=electricity_rate,
         charge_energy_added=tesla.charge_energy_added,
+        subsidy_calculation_method="exact" if state.settings.get("has_home_battery", "false").lower() != "true" else "estimated",
     )
 
     if event == "started" and data:

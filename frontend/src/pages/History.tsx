@@ -138,6 +138,11 @@ function SessionCard({ session }: { session: SessionRecord }) {
               <Typography variant="body2" fontWeight="600" color="#f5c518">
                 {Math.round(solarPct)}%
               </Typography>
+              <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                {session.subsidy_calculation_method === 'exact'
+                  ? 'Solar subsidy is exact — no home battery'
+                  : 'Solar subsidy is estimated — includes possible home battery discharge'}
+              </Typography>
             </Grid>
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>

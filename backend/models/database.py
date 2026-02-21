@@ -100,6 +100,7 @@ class SessionRecord(BaseModel):
     start_soc: Optional[int] = None
     end_soc: Optional[int] = None
     target_soc: Optional[int] = None
+    subsidy_calculation_method: Optional[str] = "estimated"
 
 
 # ---------------------------------------------------------------------------
