@@ -12,6 +12,7 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
+  Autocomplete,
   Fade,
   Chip,
   Alert,
@@ -488,24 +489,34 @@ export function Settings() {
             mb: 3,
           }}
         >
-          <FormControl
-            sx={{
-              minWidth: 140,
+          <Autocomplete
+            options={CURRENCIES}
+            value={CURRENCIES.find((c) => c.code === currency) ?? undefined}
+            onChange={(_, v) => v && setCurrency(v.code)}
+            getOptionLabel={(o) => `${o.code} — ${o.name} (${o.symbol})`}
+            isOptionEqualToValue={(o, v) => o.code === v.code}
+            filterOptions={(options, { inputValue }) => {
+              const q = inputValue.toLowerCase()
+              return options.filter(
+                (o) =>
+                  o.code.toLowerCase().includes(q) ||
+                  o.name.toLowerCase().includes(q) ||
+                  o.symbol.includes(q)
+              )
             }}
-          >
-            <InputLabel>Currency</InputLabel>
-            <Select
-              value={currency}
-              label="Currency"
-              onChange={(e) => setCurrency(e.target.value)}
-            >
-              {CURRENCIES.map((c) => (
-                <MenuItem key={c.code} value={c.code}>
-                  {c.symbol} {c.code}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+            renderOption={(props, o) => (
+              <li {...props} key={o.code}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: '100%' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 36 }}>{o.code}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>{o.name}</Typography>
+                  <Typography variant="body2" color="text.disabled">{o.symbol}</Typography>
+                </Box>
+              </li>
+            )}
+            renderInput={(params) => <TextField {...params} label="Currency" />}
+            sx={{ minWidth: 220 }}
+            disableClearable
+          />
 
           <FormControl
             sx={{
