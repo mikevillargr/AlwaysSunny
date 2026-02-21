@@ -207,7 +207,9 @@ def _check_home_detection(state: UserLoopState) -> tuple[bool, str, str | None]:
     home_lat = float(state.settings.get("home_lat", 0))
     home_lon = float(state.settings.get("home_lon", 0))
     if home_lat and home_lon and state.tesla:
-        if is_at_home_gps(state.tesla.latitude, state.tesla.longitude, home_lat, home_lon):
+        radius_m = float(state.settings.get("geofence_radius_m", 100))
+        radius_km = radius_m / 1000.0
+        if is_at_home_gps(state.tesla.latitude, state.tesla.longitude, home_lat, home_lon, radius_km=radius_km):
             return True, "charging_at_home", "gps_proximity"
         else:
             return False, "charging_away", "gps_proximity"
@@ -216,9 +218,12 @@ def _check_home_detection(state: UserLoopState) -> tuple[bool, str, str | None]:
 
 
 async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
-    """Call Ollama AI if conditions are met (min 90s gap)."""
+    """Call Ollama AI if conditions are met (respects ai_call_interval_secs)."""
     now = time.time()
-    if now - state.last_ai_call < 90:
+    call_interval = int(state.settings.get("ai_call_interval_secs", 300))
+    # Minimum 60s to prevent hammering, even if admin sets lower
+    call_interval = max(60, call_interval)
+    if now - state.last_ai_call < call_interval:
         return
 
     if not state.solax or not state.tesla or not state.forecast:
@@ -292,6 +297,20 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             temperature_override=float(ai_temp) if ai_temp else None,
             max_tokens_override=int(ai_tokens) if ai_tokens else None,
         )
+
+        # Apply admin amp clamps if configured
+        ai_min = int(state.settings.get("ai_min_amps", 5))
+        ai_max = int(state.settings.get("ai_max_amps", 32))
+        raw_amps = state.ai_recommendation.recommended_amps
+        if raw_amps > 0:  # don't clamp 0 (stop charging)
+            clamped = max(ai_min, min(ai_max, raw_amps))
+            if clamped != raw_amps:
+                logger.info(
+                    f"[{state.user_id[:8]}] AI amps clamped: {raw_amps}A → {clamped}A "
+                    f"(admin range {ai_min}-{ai_max}A)"
+                )
+                state.ai_recommendation.recommended_amps = clamped
+
         state.ai_status = "active"
         state.last_ai_call = now
         logger.info(
@@ -555,8 +574,9 @@ async def _control_tick(user_id: str) -> None:
                     except (ValueError, IndexError):
                         pass
             
-            # Stale recommendation: > 6 min old
-            if ai_age > 360:
+            # Stale recommendation check (configurable via admin settings)
+            stale_threshold = int(state.settings.get("ai_stale_threshold_secs", 360))
+            if ai_age > stale_threshold:
                 trigger = "stale"
             
             if trigger:

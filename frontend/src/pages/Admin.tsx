@@ -20,6 +20,7 @@ import { apiFetch } from '../lib/api'
 // --- Types ---
 interface AISettings {
   ai_model: string
+  ai_fallback_model: string
   ai_temperature: string
   ai_max_tokens: string
   ai_min_solar_surplus_w: string
@@ -342,18 +343,32 @@ export function Admin() {
           <CircularProgress size={20} sx={{ color: '#a855f7' }} />
         ) : aiSettings ? (
           <>
-            <Grid container spacing={2}>
-              <Grid item xs={6} sm={3}>
+            {/* Model Settings */}
+            <Typography variant="caption" color="#a855f7" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>
+              Model Configuration
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 2.5 }}>
+              <Grid item xs={6} sm={4}>
                 <TextField
-                  label="Model"
+                  label="Primary Model"
                   value={aiSettings.ai_model}
                   onChange={(e) => setAiSettings({ ...aiSettings, ai_model: e.target.value })}
                   size="small"
                   fullWidth
-                  helperText="e.g. qwen2.5:7b"
+                  helperText="Main Ollama model for AI decisions. Larger models are smarter but slower."
                 />
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid item xs={6} sm={4}>
+                <TextField
+                  label="Fallback Model"
+                  value={aiSettings.ai_fallback_model}
+                  onChange={(e) => setAiSettings({ ...aiSettings, ai_fallback_model: e.target.value })}
+                  size="small"
+                  fullWidth
+                  helperText="Used when primary model is unreachable. Should be smaller/faster."
+                />
+              </Grid>
+              <Grid item xs={6} sm={4}>
                 <TextField
                   label="Temperature"
                   type="number"
@@ -364,10 +379,10 @@ export function Admin() {
                   size="small"
                   fullWidth
                   inputProps={{ min: 0, max: 2, step: 0.05 }}
-                  helperText="0 = deterministic"
+                  helperText="Creativity vs consistency. 0 = deterministic, 0.1 = focused, 0.5+ = creative."
                 />
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid item xs={6} sm={4}>
                 <TextField
                   label="Max Tokens"
                   type="number"
@@ -378,9 +393,10 @@ export function Admin() {
                   size="small"
                   fullWidth
                   inputProps={{ min: 50, max: 500 }}
+                  helperText="Max response length. 150 is typical. Higher = more detailed reasoning."
                 />
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid item xs={6} sm={4}>
                 <TextField
                   label="Retry Attempts"
                   type="number"
@@ -391,9 +407,19 @@ export function Admin() {
                   size="small"
                   fullWidth
                   inputProps={{ min: 1, max: 5 }}
+                  helperText="Retries before falling back. More retries = more resilient but slower recovery."
                 />
               </Grid>
-              <Grid item xs={6} sm={3}>
+            </Grid>
+
+            <Divider sx={{ my: 2, borderColor: '#1a2a3d' }} />
+
+            {/* Amp Limits */}
+            <Typography variant="caption" color="#f5c518" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>
+              Charging Amp Limits
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 2.5 }}>
+              <Grid item xs={6} sm={4}>
                 <TextField
                   label="Min Amps"
                   type="number"
@@ -404,9 +430,10 @@ export function Admin() {
                   InputProps={{
                     endAdornment: <InputAdornment position="end">A</InputAdornment>,
                   }}
+                  helperText="Floor for AI recommendations. Tesla minimum is 5A. Below this, AI will stop charging instead."
                 />
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid item xs={6} sm={4}>
                 <TextField
                   label="Max Amps"
                   type="number"
@@ -417,9 +444,19 @@ export function Admin() {
                   InputProps={{
                     endAdornment: <InputAdornment position="end">A</InputAdornment>,
                   }}
+                  helperText="Ceiling for AI recommendations. Limits max charging speed regardless of AI output."
                 />
               </Grid>
-              <Grid item xs={6} sm={3}>
+            </Grid>
+
+            <Divider sx={{ my: 2, borderColor: '#1a2a3d' }} />
+
+            {/* Timing */}
+            <Typography variant="caption" color="#3b82f6" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>
+              AI Call Timing
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6} sm={4}>
                 <TextField
                   label="Call Interval"
                   type="number"
@@ -432,10 +469,10 @@ export function Admin() {
                   InputProps={{
                     endAdornment: <InputAdornment position="end">sec</InputAdornment>,
                   }}
-                  helperText="Baseline poll interval"
+                  helperText="Min seconds between AI calls. Lower = more responsive but more Ollama load. Min 60s."
                 />
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid item xs={6} sm={4}>
                 <TextField
                   label="Stale Threshold"
                   type="number"
@@ -448,7 +485,7 @@ export function Admin() {
                   InputProps={{
                     endAdornment: <InputAdornment position="end">sec</InputAdornment>,
                   }}
-                  helperText="Force refresh after"
+                  helperText="Force a new AI call if the last recommendation is older than this. Prevents stale decisions."
                 />
               </Grid>
             </Grid>

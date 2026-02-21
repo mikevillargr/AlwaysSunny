@@ -140,7 +140,42 @@ export function Settings() {
   const [locationSaved, setLocationSaved] = useState(false)
   const [geoLoading, setGeoLoading] = useState(false)
   const [geoError, setGeoError] = useState<string | null>(null)
-  const locationDirty = homeLat !== savedLocation.lat || homeLon !== savedLocation.lon
+
+  // Address search (Nominatim)
+  const [addressQuery, setAddressQuery] = useState('')
+  const [addressSearching, setAddressSearching] = useState(false)
+  const [addressResults, setAddressResults] = useState<{ lat: string; lon: string; display_name: string }[]>([])
+
+  // Geofence radius
+  const [geofenceRadius, setGeofenceRadius] = useState(100)
+  const [savedGeofenceRadius, setSavedGeofenceRadius] = useState(100)
+
+  const locationDirty = homeLat !== savedLocation.lat || homeLon !== savedLocation.lon || geofenceRadius !== savedGeofenceRadius
+
+  const searchAddress = async () => {
+    if (!addressQuery.trim()) return
+    setAddressSearching(true)
+    setAddressResults([])
+    try {
+      const q = encodeURIComponent(addressQuery.trim())
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&addressdetails=0`,
+        { headers: { 'Accept-Language': 'en' } }
+      )
+      if (resp.ok) {
+        const data = await resp.json()
+        setAddressResults(data.map((r: { lat: string; lon: string; display_name: string }) => ({
+          lat: parseFloat(r.lat).toFixed(6),
+          lon: parseFloat(r.lon).toFixed(6),
+          display_name: r.display_name,
+        })))
+      }
+    } catch (e) {
+      console.warn('[Settings] Address search failed:', e)
+    } finally {
+      setAddressSearching(false)
+    }
+  }
 
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
@@ -170,9 +205,11 @@ export function Settings() {
         body: JSON.stringify({
           home_lat: parseFloat(homeLat),
           home_lon: parseFloat(homeLon),
+          geofence_radius_m: geofenceRadius,
         }),
       })
       setSavedLocation({ lat: homeLat, lon: homeLon })
+      setSavedGeofenceRadius(geofenceRadius)
       setLocationSaved(true)
       setTimeout(() => setLocationSaved(false), 2500)
     } catch (e) {
@@ -194,6 +231,10 @@ export function Settings() {
           if (data.home_lon) {
             setHomeLon(String(data.home_lon))
             setSavedLocation((prev) => ({ ...prev, lon: String(data.home_lon) }))
+          }
+          if (data.geofence_radius_m != null) {
+            setGeofenceRadius(Number(data.geofence_radius_m))
+            setSavedGeofenceRadius(Number(data.geofence_radius_m))
           }
           // Electricity tariff
           if (data.electricity_rate != null) {
@@ -721,7 +762,7 @@ export function Settings() {
         </Box>
       </Card>
 
-      {/* Home Location */}
+      {/* Solar Charging Location */}
       <Card
         sx={{
           p: 3,
@@ -733,7 +774,7 @@ export function Settings() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            mb: 3,
+            mb: 1,
           }}
         >
           <Box
@@ -745,7 +786,7 @@ export function Settings() {
           >
             <MapPin size={18} color="#22c55e" />
             <Typography variant="h6" fontWeight="600">
-              Home Location
+              Solar Charging Location
             </Typography>
           </Box>
           <Fade in={locationSaved}>
@@ -766,17 +807,87 @@ export function Settings() {
           </Fade>
         </Box>
 
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-          Used for solar forecasts (Open-Meteo), home detection (GPS fallback), and sunrise/sunset times.
+        <Typography variant="body2" color="text.secondary" display="block" sx={{ mb: 2 }}>
+          Set the location where your solar inverter and EV charger are installed. This is used to:
         </Typography>
+        <Box component="ul" sx={{ m: 0, pl: 2.5, mb: 2 }}>
+          <Typography component="li" variant="caption" color="text.secondary">
+            Determine if your car is charging at this location (vs. elsewhere)
+          </Typography>
+          <Typography component="li" variant="caption" color="text.secondary">
+            Fetch solar irradiance forecasts and sunrise/sunset times
+          </Typography>
+          <Typography component="li" variant="caption" color="text.secondary">
+            Disable solar optimization when the car is away from this location
+          </Typography>
+        </Box>
+        <Alert severity="info" sx={{ mb: 2, bgcolor: 'rgba(59,130,246,0.06)', '& .MuiAlert-icon': { color: '#3b82f6' } }}>
+          <Typography variant="caption">
+            When your car is charging away from this location, AlwaysSunny will show "Charging Away" and won't send any charging commands — your car charges normally using the remote charger's settings.
+          </Typography>
+        </Alert>
 
+        {/* Address Search */}
+        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+          Search by address or place name
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'flex-start' }}>
+          <TextField
+            label="Search address, city, or place"
+            value={addressQuery}
+            onChange={(e) => setAddressQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') searchAddress() }}
+            size="small"
+            fullWidth
+            placeholder="e.g. 123 Main St, Manila"
+          />
+          <Button
+            variant="outlined"
+            onClick={searchAddress}
+            disabled={addressSearching || !addressQuery.trim()}
+            sx={{ flexShrink: 0, height: 40, minWidth: 80 }}
+          >
+            {addressSearching ? <CircularProgress size={16} /> : 'Search'}
+          </Button>
+        </Box>
+        {addressResults.length > 0 && (
+          <Box sx={{ mb: 2, maxHeight: 160, overflow: 'auto', border: '1px solid #2a3f57', borderRadius: 1 }}>
+            {addressResults.map((r, i) => (
+              <Box
+                key={i}
+                onClick={() => {
+                  setHomeLat(r.lat)
+                  setHomeLon(r.lon)
+                  setAddressResults([])
+                  setAddressQuery(r.display_name.split(',').slice(0, 3).join(','))
+                }}
+                sx={{
+                  px: 1.5, py: 1,
+                  cursor: 'pointer',
+                  '&:hover': { bgcolor: 'rgba(59,130,246,0.08)' },
+                  borderBottom: i < addressResults.length - 1 ? '1px solid #1a2a3d' : 'none',
+                }}
+              >
+                <Typography variant="caption" color="text.primary" sx={{ display: 'block' }}>
+                  {r.display_name}
+                </Typography>
+                <Typography variant="caption" color="text.disabled" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
+                  {r.lat}, {r.lon}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {/* Quick actions + coordinates */}
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, alignItems: 'flex-start' }}>
           <Button
             variant="outlined"
             onClick={handleUseMyLocation}
             disabled={geoLoading}
             startIcon={geoLoading ? <CircularProgress size={16} /> : <MapPin size={16} />}
-            sx={{ flexShrink: 0, height: 56 }}
+            size="small"
+            sx={{ flexShrink: 0 }}
           >
             {geoLoading ? 'Getting location...' : 'Use My Location'}
           </Button>
@@ -785,15 +896,52 @@ export function Settings() {
             value={homeLat}
             onChange={(e) => setHomeLat(e.target.value)}
             placeholder="14.5995"
-            sx={{ width: 160, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            size="small"
+            sx={{ width: 140, '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.85rem' } }}
           />
           <TextField
             label="Longitude"
             value={homeLon}
             onChange={(e) => setHomeLon(e.target.value)}
             placeholder="120.9842"
-            sx={{ width: 160, '& .MuiOutlinedInput-root': { fontFamily: 'monospace' } }}
+            size="small"
+            sx={{ width: 140, '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.85rem' } }}
           />
+        </Box>
+
+        {/* Map Preview */}
+        {homeLat && homeLon && (
+          <Box sx={{ mb: 2, borderRadius: 1, overflow: 'hidden', border: '1px solid #2a3f57', height: 180 }}>
+            <img
+              src={`https://staticmap.openstreetmap.de/staticmap.php?center=${homeLat},${homeLon}&zoom=15&size=600x180&markers=${homeLat},${homeLon},red-pushpin`}
+              alt="Map preview"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          </Box>
+        )}
+
+        {/* Geofence Radius */}
+        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+          Geofence Radius: {geofenceRadius}m
+        </Typography>
+        <Typography variant="caption" color="text.disabled" display="block" sx={{ mb: 1 }}>
+          How close your car must be to this location to be considered "at home". Increase if your parking spot is far from the pin.
+        </Typography>
+        <Box sx={{ px: 1, mb: 2 }}>
+          <input
+            type="range"
+            min={50}
+            max={500}
+            step={25}
+            value={geofenceRadius}
+            onChange={(e) => setGeofenceRadius(Number(e.target.value))}
+            style={{ width: '100%', accentColor: '#22c55e' }}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography variant="caption" color="text.disabled">50m</Typography>
+            <Typography variant="caption" color="text.disabled">500m</Typography>
+          </Box>
         </Box>
 
         {geoError && (
@@ -811,7 +959,7 @@ export function Settings() {
         >
           <Typography variant="caption" color="text.secondary">
             {homeLat && homeLon
-              ? `📍 ${homeLat}, ${homeLon}`
+              ? `📍 ${homeLat}, ${homeLon} · ${geofenceRadius}m radius`
               : 'No location set — solar forecast and home detection require this.'}
           </Typography>
           <Button
