@@ -1,9 +1,9 @@
 # Staging environment — runs alongside production on the same VPS
 # Deploy: docker compose -f docker-compose.staging.yml up -d --build
-# Access: http://<VPS_IP>:8080
+# Access: http://<VPS_IP>/staging/
 #
-# Uses the same Supabase project and Ollama instance as production,
-# but separate containers and a different port.
+# No extra ports — production nginx proxies /staging/ to these containers.
+# Uses the same Supabase project and Ollama instance as production.
 
 services:
   backend-staging:
@@ -30,8 +30,6 @@ services:
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
       dockerfile: Dockerfile.staging
     container_name: alwayssunny-frontend-staging
-    ports:
-      - "8080:80"
     depends_on:
       backend-staging:
         condition: service_healthy

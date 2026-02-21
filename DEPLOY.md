@@ -2,15 +2,15 @@
 
 ## Branches
 
-| Branch    | Environment | URL                          | Auto-deploy? |
-|-----------|-------------|------------------------------|-------------|
-| `staging` | Staging     | `http://76.13.191.149:8080`  | Manual      |
-| `main`    | Production  | `http://76.13.191.149`       | Manual      |
+| Branch    | Environment | URL                              | Auto-deploy? |
+|-----------|-------------|----------------------------------|-------------|
+| `staging` | Staging     | `http://76.13.191.149/staging/`  | Manual      |
+| `main`    | Production  | `http://76.13.191.149/`          | Manual      |
 
 ## Workflow
 
 ```
-local development → push to staging → test on :8080 → merge to main → deploy production
+local development → push to staging → test on /staging/ → merge to main → deploy production
 ```
 
 ### 1. Push to staging
@@ -38,9 +38,16 @@ git fetch origin && git checkout staging && git pull origin staging
 docker compose -f docker-compose.staging.yml up -d --build
 ```
 
+**Important:** Production must also be rebuilt after the first staging setup, because the production nginx config now includes the `/staging/` proxy block:
+
+```bash
+git checkout main && git pull origin main
+docker compose up -d --build
+```
+
 ### 3. Test on staging
 
-Open `http://76.13.191.149:8080` and verify changes.
+Open `http://76.13.191.149/staging/` and verify changes.
 
 ### 4. Merge to main and deploy production
 
@@ -75,13 +82,17 @@ Both environments run on the same VPS and share:
 
 They are isolated by:
 - **Separate containers** (`alwayssunny-backend-staging`, `alwayssunny-frontend-staging`)
-- **Separate ports** (production: 80, staging: 8080)
+- **Path prefix** — production at `/`, staging at `/staging/`
 - **Separate nginx configs** (proxy to different backend containers)
 
-## Important
-
-Add the staging origin to `ALLOWED_ORIGINS` in `backend/.env`:
+### How routing works
 
 ```
-ALLOWED_ORIGINS=http://76.13.191.149,http://76.13.191.149:8080
+Browser → http://VPS/staging/api/status
+  → production nginx (port 80)
+    → location /staging/ → proxy_pass http://frontend-staging:80/
+      → staging nginx receives /api/status
+        → location /api/ → proxy_pass http://backend-staging:8000
 ```
+
+The staging frontend is built with `base: '/staging/'` (via `VITE_BASE_PATH`), so all JS/CSS assets and API calls are automatically prefixed. No code changes needed between environments.

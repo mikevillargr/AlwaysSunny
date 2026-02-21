@@ -2,9 +2,9 @@
 # Deploy staging environment on VPS
 # Usage: ssh root@76.13.191.149 'cd /opt/alwayssunny && bash deploy-staging.sh'
 #
-# Pipeline: local → staging branch → test on :8080 → merge to main → deploy production
+# Pipeline: local → staging branch → test on /staging/ → merge to main → deploy production
 #
-# Staging runs on port 8080 alongside production on port 80.
+# Staging runs at /staging/ path alongside production at /.
 # Both share the same Supabase project, Ollama instance, and Docker network.
 
 set -e
@@ -20,9 +20,15 @@ git pull origin staging
 echo "Building staging containers..."
 docker compose -f docker-compose.staging.yml up -d --build
 
+# Also rebuild production frontend so its nginx picks up the /staging/ proxy block
+echo "Rebuilding production frontend (nginx config updated)..."
+git checkout main
+docker compose up -d --build frontend
+
 echo ""
 echo "=== Staging deployed ==="
-echo "Access at: http://$(hostname -I | awk '{print $1}'):8080"
+VPS_IP=$(hostname -I | awk '{print $1}')
+echo "Staging:    http://${VPS_IP}/staging/"
+echo "Production: http://${VPS_IP}/"
 echo ""
-echo "Production (port 80) is unaffected."
 echo "To stop staging: docker compose -f docker-compose.staging.yml down"

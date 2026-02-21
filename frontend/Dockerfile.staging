@@ -10,7 +10,7 @@ COPY package.json package-lock.json ./
 RUN npm install
 
 COPY . .
-RUN npm run build
+RUN VITE_BASE_PATH=/staging/ npm run build
 
 # Stage 2: Serve (staging nginx config → proxies to backend-staging)
 FROM nginx:alpine
