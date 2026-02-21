@@ -6,6 +6,7 @@ from middleware.auth import get_current_user
 from models.database import StatusResponse, Session, Forecast, ForecastHour
 from scheduler.control_loop import get_user_state, build_status_response, register_user_loop
 from services.supabase_client import get_user_settings
+from services.ollama import is_ollama_healthy
 
 router = APIRouter()
 
@@ -57,6 +58,10 @@ def get_sample_status(user_id: str) -> StatusResponse:
         grid_budget_total_kwh=float(settings.get("daily_grid_budget_kwh", 0)),
         grid_budget_used_kwh=0,
         grid_budget_pct=0,
+        live_solar_pct=0,
+        daily_solar_pct=0,
+        currency_code=settings.get("currency_code", "PHP"),
+        ollama_healthy=is_ollama_healthy(),
     )
 
 

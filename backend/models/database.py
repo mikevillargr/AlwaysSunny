@@ -80,6 +80,13 @@ class StatusResponse(BaseModel):
     grid_budget_total_kwh: float
     grid_budget_used_kwh: float
     grid_budget_pct: float
+    # Solar subsidy
+    live_solar_pct: float = 0
+    daily_solar_pct: float = 0
+    # Currency
+    currency_code: str = "PHP"
+    # AI service health
+    ollama_healthy: bool = False
 
 
 # ---------------------------------------------------------------------------
