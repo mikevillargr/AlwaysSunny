@@ -245,6 +245,8 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
         except Exception:
             current_time = datetime.now().strftime("%H:%M")
 
+        est_w, est_irr, est_eff = _estimate_available_w(state)
+
         prompt = build_prompt(
             solar_w=state.solax.solar_w,
             household_w=state.solax.household_demand_w,
@@ -268,6 +270,12 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             session_solar_pct=session_solar_pct,
             current_time=current_time,
             minutes_to_full_charge=state.tesla.minutes_to_full_charge if state.tesla else 0,
+            has_home_battery=state.settings.get("has_home_battery", "false").lower() == "true",
+            has_net_metering=state.settings.get("has_net_metering", "false").lower() == "true",
+            panel_capacity_w=int(state.settings.get("panel_capacity_w", 0)),
+            estimated_available_w=est_w,
+            forecasted_irradiance_wm2=est_irr,
+            efficiency_coeff=est_eff,
         )
 
         # Apply admin AI sensitivity settings if configured

@@ -76,6 +76,83 @@ class AIRecommendation:
         }
 
 
+def _build_actual_conditions(
+    solar_w: float,
+    solar_trend: str,
+    household_w: float,
+    grid_import_w: float,
+    battery_soc: int,
+    battery_w: float,
+    solar_surplus_w: float,
+    max_solar_amps: int,
+    has_home_battery: bool,
+    panel_capacity_w: int,
+    estimated_available_w: float,
+    forecasted_irradiance_wm2: float,
+    efficiency_coeff: float,
+) -> str:
+    """Build the ACTUAL CONDITIONS block, conditional on inverter setup."""
+    if not has_home_battery and panel_capacity_w > 0 and estimated_available_w > 0:
+        return f"""Solar yield (actual measured): {solar_w:.0f}W
+Solar trend (last 5 min): {solar_trend}  [rising | stable | falling]
+Estimated panel capacity available now: {estimated_available_w:.0f}W
+  ↑ Derived from Open-Meteo irradiance ({forecasted_irradiance_wm2:.0f} W/m²)
+    × learned system efficiency coefficient ({efficiency_coeff:.2f} W per W/m²)
+    capped at installed panel capacity ({panel_capacity_w}W)
+  ↑ Actual yield is lower than estimate because this system has no home battery
+    and no net metering — the Solax inverter self-limits output to match current
+    load via MPPT throttling. Solar yield will increase automatically as Tesla
+    charging amps increase. Do not treat solar_yield_w as a ceiling.
+    Treat estimated_available_w as the true available ceiling.
+  ↑ Use solar_trend to assess short-term confidence in the estimate:
+    if trend is "falling", weight estimate conservatively;
+    if "rising" or "stable", trust the estimate fully.
+Household demand: {household_w:.0f}W
+Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
+Solar surplus (estimated available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw"""
+    else:
+        return f"""Solar yield: {solar_w:.0f}W  |  Trend (last 5 min): {solar_trend}
+Household demand: {household_w:.0f}W
+Solar surplus (available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw
+Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
+Home battery SoC: {battery_soc}%  |  Battery power: {battery_w:.0f}W"""
+
+
+def _build_reasoning_guidance(has_home_battery: bool, has_net_metering: bool) -> str:
+    """Build conditional reasoning guidance blocks based on inverter setup."""
+    blocks = []
+
+    if not has_net_metering:
+        blocks.append("""NET METERING NOTE: This system cannot export solar to the grid for credit.
+Any solar energy not consumed locally is wasted entirely. Therefore:
+- Prioritise consuming all available solar aggressively
+- Do not hold back charging to "conserve" solar — unused solar has zero value
+- When solar surplus is available, always prefer higher amps over lower
+- Grid budget is still a hard constraint, but solar consumption is the primary goal
+- If estimated_available_w exceeds current charging rate plus household demand,
+  increase amps immediately — the inverter will follow""")
+    else:
+        blocks.append("""NET METERING NOTE: This system can export surplus solar for grid credit.
+Unused solar is not wasted — it earns a return. Therefore:
+- Balance between charging the Tesla and exporting surplus
+- Do not aggressively consume all solar if the export rate is favourable
+- Optimise for overall solar value (charging + export), not just charging speed""")
+
+    if not has_home_battery:
+        blocks.append("""BATTERY NOTE: This system has no home battery. The inverter self-limits to
+match demand — increasing Tesla charging amps directly causes the inverter
+to produce more solar output up to the estimated ceiling. There is no
+battery buffer to draw from or charge. Decisions should be made purely on
+live solar availability vs Tesla charging need.""")
+    else:
+        blocks.append("""BATTERY NOTE: This system has a home battery. Solar subsidy calculations
+are estimates — battery discharge may be attributed to solar. Home battery
+SoC should be considered when recommending aggressive charging, as the
+battery may be the source of apparent surplus rather than live solar.""")
+
+    return "\n\n".join(blocks)
+
+
 def build_prompt(
     solar_w: float,
     household_w: float,
@@ -99,13 +176,24 @@ def build_prompt(
     session_solar_pct: float = 0.0,
     current_time: str = "",
     minutes_to_full_charge: int = 0,
+    has_home_battery: bool = True,
+    has_net_metering: bool = False,
+    panel_capacity_w: int = 0,
+    estimated_available_w: float = 0.0,
+    forecasted_irradiance_wm2: float = 0.0,
+    efficiency_coeff: float = 0.0,
 ) -> str:
     """Build the AI prompt with full context for optimization decision."""
     # --- Pre-compute goal-aware metrics ---
     soc_gap = max(0, target_soc - tesla_soc)
     battery_capacity_kwh = 75.0  # Tesla Model 3/Y typical
     kwh_needed = (soc_gap / 100.0) * battery_capacity_kwh
-    solar_surplus_w = max(0, solar_w - household_w)
+    # For no-battery setups, use estimated available as the true ceiling
+    if not has_home_battery and panel_capacity_w > 0 and estimated_available_w > 0:
+        effective_available_w = estimated_available_w
+    else:
+        effective_available_w = solar_w
+    solar_surplus_w = max(0, effective_available_w - household_w)
     max_solar_amps = min(32, int(solar_surplus_w / 240))
     kwh_per_amp_hour = 0.24  # 240V × 1A = 240W = 0.24 kWh/h
 
@@ -231,12 +319,13 @@ Tesla minimum charging rate: 5A (never recommend 1-4A)
 Tesla maximum charging rate: 32A
 Each amp ≈ 240W at 240V circuit (0.24 kWh/h per amp)
 
+=== SYSTEM CONFIGURATION ===
+Home battery present: {has_home_battery}
+Net metering enabled: {has_net_metering}
+Installed panel capacity: {panel_capacity_w}W (0 = unknown)
+
 === ACTUAL CONDITIONS (Solax — ground truth) ===
-Solar yield: {solar_w:.0f}W  |  Trend (last 5 min): {solar_trend}
-Household demand: {household_w:.0f}W
-Solar surplus (available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw
-Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
-Home battery SoC: {battery_soc}%  |  Battery power: {battery_w:.0f}W
+{_build_actual_conditions(solar_w, solar_trend, household_w, grid_import_w, battery_soc, battery_w, solar_surplus_w, max_solar_amps, has_home_battery, panel_capacity_w, estimated_available_w, forecasted_irradiance_wm2, efficiency_coeff)}
 
 === SOLAR FORECAST (Open-Meteo) ===
 {irradiance_curve}
@@ -286,6 +375,9 @@ Good:
 - "Solar-first: surplus at 3,200W supports 13A. 8.5 kWh to go, ~2.7h at 13A with 4h of sun — on track."
 - "Departure 7am: need 12 kWh in 5h (10A min). Solar covers 8A, pulling 2A from grid. Budget: 18 kWh remaining."
 - "Only 600W surplus — below 1,200W minimum for 5A. Pausing. Forecast shows 900 W/m² at 2pm, will resume."
+
+=== SYSTEM-SPECIFIC GUIDANCE ===
+{_build_reasoning_guidance(has_home_battery, has_net_metering)}
 
 Respond ONLY in JSON (no preamble, no explanation outside JSON):
 {{"recommended_amps": <int 0-32>, "reasoning": "<1-2 sentences with specific numbers>", "confidence": "low|medium|high"}}"""
