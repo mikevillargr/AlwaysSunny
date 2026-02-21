@@ -32,6 +32,9 @@ DEFAULTS = {
     "charging_strategy": "departure",
     "departure_time": "",
     "onboarding_complete": "false",
+    "panel_capacity_w": "0",
+    "has_home_battery": "false",
+    "has_net_metering": "false",
 }
 
 
@@ -70,6 +73,9 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
         departure_time=merged.get("departure_time") or None,
         onboarding_complete=_parse_bool(merged.get("onboarding_complete", "false")),
         tessie_enabled=_parse_bool(merged.get("tessie_enabled", "true")),
+        panel_capacity_w=int(merged.get("panel_capacity_w", 0)),
+        has_home_battery=_parse_bool(merged.get("has_home_battery", "false")),
+        has_net_metering=_parse_bool(merged.get("has_net_metering", "false")),
     )
 
 

@@ -17,7 +17,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material'
-import { Check, Globe, Sun, Car, Bot, Send, MapPin } from 'lucide-react'
+import { Check, Globe, Sun, Car, Bot, Send, MapPin, Zap } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 export function Settings() {
   const [currency, setCurrency] = useState('PHP')
@@ -103,6 +103,34 @@ export function Settings() {
     setTimeout(() => setNotifSaved(false), 2500)
   }
 
+  // Inverter / Solar Setup state
+  const [panelCapacityW, setPanelCapacityW] = useState('0')
+  const [hasHomeBattery, setHasHomeBattery] = useState(false)
+  const [hasNetMetering, setHasNetMetering] = useState(false)
+  const [savedInverter, setSavedInverter] = useState({ panelCapacityW: '0', hasHomeBattery: false, hasNetMetering: false })
+  const [inverterSaved, setInverterSaved] = useState(false)
+  const inverterDirty =
+    panelCapacityW !== savedInverter.panelCapacityW ||
+    hasHomeBattery !== savedInverter.hasHomeBattery ||
+    hasNetMetering !== savedInverter.hasNetMetering
+  const handleSaveInverter = async () => {
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          panel_capacity_w: parseInt(panelCapacityW) || 0,
+          has_home_battery: hasHomeBattery,
+          has_net_metering: hasNetMetering,
+        }),
+      })
+    } catch (e) {
+      console.warn('[Settings] Failed to save inverter settings:', e)
+    }
+    setSavedInverter({ panelCapacityW, hasHomeBattery, hasNetMetering })
+    setInverterSaved(true)
+    setTimeout(() => setInverterSaved(false), 2500)
+  }
+
   // Home Location state
   const [homeLat, setHomeLat] = useState('')
   const [homeLon, setHomeLon] = useState('')
@@ -175,6 +203,20 @@ export function Settings() {
           if (data.timezone) {
             setTimezone(data.timezone)
             setSavedTimezone(data.timezone)
+          }
+          // Inverter settings
+          if (data.panel_capacity_w != null) {
+            const capStr = String(data.panel_capacity_w)
+            setPanelCapacityW(capStr)
+            setSavedInverter((prev) => ({ ...prev, panelCapacityW: capStr }))
+          }
+          if (data.has_home_battery != null) {
+            setHasHomeBattery(data.has_home_battery)
+            setSavedInverter((prev) => ({ ...prev, hasHomeBattery: data.has_home_battery }))
+          }
+          if (data.has_net_metering != null) {
+            setHasNetMetering(data.has_net_metering)
+            setSavedInverter((prev) => ({ ...prev, hasNetMetering: data.has_net_metering }))
           }
           // Notification prefs
           if (data.notif_grid_budget != null) setNotifGridBudget(data.notif_grid_budget)
@@ -433,6 +475,127 @@ export function Settings() {
               ml: 2,
               flexShrink: 0,
               opacity: tariffDirty ? 1 : 0.4,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            Save
+          </Button>
+        </Box>
+      </Card>
+
+      {/* Solar / Inverter Setup */}
+      <Card
+        sx={{
+          p: 3,
+          mb: 3,
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 3,
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+            }}
+          >
+            <Zap size={18} color="#f5c518" />
+            <Typography variant="h6" fontWeight="600">
+              Solar / Inverter Setup
+            </Typography>
+          </Box>
+          <Fade in={inverterSaved}>
+            <Chip
+              icon={<Check size={14} />}
+              label="Saved"
+              size="small"
+              sx={{
+                bgcolor: 'rgba(34,197,94,0.12)',
+                color: '#22c55e',
+                border: '1px solid rgba(34,197,94,0.3)',
+                fontWeight: 600,
+                '& .MuiChip-icon': {
+                  color: '#22c55e',
+                },
+              }}
+            />
+          </Fade>
+        </Box>
+
+        <TextField
+          label="Installed Panel Capacity"
+          value={panelCapacityW}
+          onChange={(e) => setPanelCapacityW(e.target.value)}
+          placeholder="0"
+          type="number"
+          InputProps={{
+            endAdornment: (
+              <Typography variant="caption" color="text.secondary">
+                watts
+              </Typography>
+            ),
+          }}
+          sx={{ width: 220, mb: 3 }}
+        />
+
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+          Total rated capacity of all solar panels. Set to 0 if unknown. Used to estimate true solar availability when the inverter self-limits output.
+        </Typography>
+
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            mb: 3,
+          }}
+        >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={hasHomeBattery}
+                onChange={(e) => setHasHomeBattery(e.target.checked)}
+              />
+            }
+            label="Home battery installed"
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 7, mt: -1 }}>
+            Enable if you have a home battery (e.g. Solax Triple Power). Affects how solar subsidy is calculated.
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={hasNetMetering}
+                onChange={(e) => setHasNetMetering(e.target.checked)}
+              />
+            }
+            label="Net metering enabled"
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 7, mt: -1 }}>
+            Enable if your utility credits you for exporting surplus solar to the grid.
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <Button
+            variant="contained"
+            size="small"
+            disabled={!inverterDirty}
+            onClick={handleSaveInverter}
+            sx={{
+              opacity: inverterDirty ? 1 : 0.4,
               transition: 'opacity 0.2s',
             }}
           >

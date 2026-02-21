@@ -123,6 +123,9 @@ class SettingsUpdate(BaseModel):
     charging_strategy: Optional[str] = None
     departure_time: Optional[str] = None
     tessie_enabled: Optional[bool] = None
+    panel_capacity_w: Optional[int] = None
+    has_home_battery: Optional[bool] = None
+    has_net_metering: Optional[bool] = None
 
 
 class SettingsResponse(BaseModel):
@@ -144,6 +147,9 @@ class SettingsResponse(BaseModel):
     departure_time: Optional[str] = None
     onboarding_complete: bool = False
     tessie_enabled: bool = True
+    panel_capacity_w: int = 0
+    has_home_battery: bool = False
+    has_net_metering: bool = False
 
 
 # ---------------------------------------------------------------------------
