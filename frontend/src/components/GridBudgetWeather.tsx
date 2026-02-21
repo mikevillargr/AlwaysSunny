@@ -7,9 +7,10 @@ import { formatHour12 } from '../utils/constants'
 interface GridBudgetWeatherProps {
   forecast: Forecast
   forecastLocationSet?: boolean
+  forecastLocationName?: string | null
 }
 
-export function GridBudgetWeather({ forecast, forecastLocationSet }: GridBudgetWeatherProps) {
+export function GridBudgetWeather({ forecast, forecastLocationSet, forecastLocationName }: GridBudgetWeatherProps) {
   // Get current hour's data from forecast (daylight hours only)
   const currentHour = new Date().getHours()
   const hourStr = `${String(currentHour).padStart(2, '0')}:00`
@@ -192,7 +193,7 @@ export function GridBudgetWeather({ forecast, forecastLocationSet }: GridBudgetW
           }}
         >
           {forecastLocationSet
-            ? 'Based on your Solar Charging Location · Open-Meteo'
+            ? `${forecastLocationName || 'Your Solar Charging Location'} · Open-Meteo`
             : 'Set your Solar Charging Location in Settings · Open-Meteo'}
         </Typography>
       </Box>

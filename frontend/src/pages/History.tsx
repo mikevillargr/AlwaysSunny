@@ -116,7 +116,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
             Charged: {kwh.toFixed(1)} kWh
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {Math.round(solarPct)}% Solar
+            {Math.round(solarPct)}% Solar Charged
           </Typography>
         </Box>
 
@@ -166,7 +166,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
             </Grid>
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Solar Subsidy
+                Tesla Solar Subsidy
               </Typography>
               <Typography variant="body2" fontWeight="600" color="#f5c518">
                 {Math.round(solarPct)}%
@@ -351,7 +351,7 @@ export function History() {
   const summaryStats = [
     { label: 'All-time solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
     { label: 'All-time saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
-    { label: 'Avg solar subsidy', value: `${avgSubsidy}%`, color: '#f5c518' },
+    { label: 'Avg Tesla solar %', value: `${avgSubsidy}%`, color: '#f5c518' },
     { label: 'Sessions this month', value: `${thisMonthCount}` },
   ]
 

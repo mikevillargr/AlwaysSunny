@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Circle, Popup, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -70,6 +70,36 @@ function DraggableMarker({
       position={[lat, lon]}
       ref={markerRef}
       icon={markerIcon}
+    >
+      <Tooltip direction="top" offset={[0, -42]} permanent={false}>
+        Drag to refine location
+      </Tooltip>
+    </Marker>
+  )
+}
+
+function ReactiveCircle({ lat, lon, radiusM }: { lat: number; lon: number; radiusM: number }) {
+  const circleRef = useRef<L.Circle>(null)
+
+  useEffect(() => {
+    if (circleRef.current) {
+      circleRef.current.setRadius(radiusM)
+      circleRef.current.setLatLng([lat, lon])
+    }
+  }, [lat, lon, radiusM])
+
+  return (
+    <Circle
+      ref={circleRef}
+      center={[lat, lon]}
+      radius={radiusM}
+      pathOptions={{
+        color: '#22c55e',
+        fillColor: '#22c55e',
+        fillOpacity: 0.1,
+        weight: 2,
+        dashArray: '6 4',
+      }}
     />
   )
 }
@@ -81,7 +111,7 @@ export function LocationMap({ lat, lon, radiusM, onPositionChange }: LocationMap
       zoom={16}
       style={{ height: '100%', width: '100%', borderRadius: 8 }}
       scrollWheelZoom
-      zoomControl={false}
+      zoomControl
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -89,17 +119,7 @@ export function LocationMap({ lat, lon, radiusM, onPositionChange }: LocationMap
       />
       <MapUpdater lat={lat} lon={lon} />
       <DraggableMarker lat={lat} lon={lon} onPositionChange={onPositionChange} />
-      <Circle
-        center={[lat, lon]}
-        radius={radiusM}
-        pathOptions={{
-          color: '#22c55e',
-          fillColor: '#22c55e',
-          fillOpacity: 0.1,
-          weight: 2,
-          dashArray: '6 4',
-        }}
-      />
+      <ReactiveCircle lat={lat} lon={lon} radiusM={radiusM} />
     </MapContainer>
   )
 }

@@ -11,8 +11,9 @@ interface EnergyFlowPanelProps {
   chargingState: string
   chargePortConnected: boolean
   tessieEnabled?: boolean
-  liveSolarPct?: number
-  dailySolarPct?: number
+  liveTeslaSolarPct?: number
+  dailyTeslaSolarPct?: number
+  solarToTeslaW?: number
 }
 
 function fmt(w: number): string {
@@ -32,8 +33,9 @@ export function EnergyFlowPanel({
   chargingState,
   chargePortConnected,
   tessieEnabled = true,
-  liveSolarPct = 0,
-  dailySolarPct = 0,
+  liveTeslaSolarPct = 0,
+  dailyTeslaSolarPct = 0,
+  solarToTeslaW = 0,
 }: EnergyFlowPanelProps) {
   const teslaW = teslaChargingKw * 1000
   const isCharging = chargingState === 'Charging' && chargePortConnected
@@ -270,10 +272,10 @@ export function EnergyFlowPanel({
               color: teslaColor,
             },
             {
-              label: 'SOLAR SUBSIDY',
-              value: `${Math.round(liveSolarPct)}%`,
-              unit: `today ${Math.round(dailySolarPct)}%`,
-              color: liveSolarPct >= 80 ? '#f5c518' : liveSolarPct >= 50 ? '#e2e8f0' : '#64748b',
+              label: 'SOLAR TO TESLA',
+              value: isCharging ? `${Math.round(liveTeslaSolarPct)}%` : '—',
+              unit: isCharging ? `${fmtComma(solarToTeslaW)}W · today ${Math.round(dailyTeslaSolarPct)}%` : `today ${dailyTeslaSolarPct > 0 ? Math.round(dailyTeslaSolarPct) + '%' : '—'}`,
+              color: isCharging ? (liveTeslaSolarPct >= 80 ? '#f5c518' : liveTeslaSolarPct >= 50 ? '#e2e8f0' : '#64748b') : '#64748b',
             },
           ].map((stat, i) => (
             <Box

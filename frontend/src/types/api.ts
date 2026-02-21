@@ -118,7 +118,11 @@ export interface StatusResponse {
   grid_budget_total_kwh: number
   grid_budget_used_kwh: number
   grid_budget_pct: number
-  // Solar subsidy
+  // Solar subsidy (Tesla-specific)
+  solar_to_tesla_w: number
+  live_tesla_solar_pct: number
+  daily_tesla_solar_pct: number
+  // Legacy
   live_solar_pct: number
   daily_solar_pct: number
   // Currency
@@ -129,6 +133,7 @@ export interface StatusResponse {
   forecast_location_set: boolean
   forecast_location_lat: number | null
   forecast_location_lon: number | null
+  forecast_location_name: string | null
 }
 
 // Session history types

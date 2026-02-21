@@ -114,8 +114,9 @@ export function Dashboard() {
             chargingState={status.charging_state}
             chargePortConnected={status.charge_port_connected}
             tessieEnabled={tessieEnabled}
-            liveSolarPct={status.live_solar_pct}
-            dailySolarPct={status.daily_solar_pct}
+            liveTeslaSolarPct={status.live_tesla_solar_pct}
+            dailyTeslaSolarPct={status.daily_tesla_solar_pct}
+            solarToTeslaW={status.solar_to_tesla_w}
           />
         </Grid>
         <Grid item xs={12} sm={4}>
@@ -144,6 +145,7 @@ export function Dashboard() {
           <GridBudgetWeather
             forecast={status.forecast}
             forecastLocationSet={status.forecast_location_set}
+            forecastLocationName={status.forecast_location_name}
           />
         </Grid>
       </Grid>

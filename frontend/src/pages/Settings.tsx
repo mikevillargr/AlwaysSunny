@@ -209,6 +209,9 @@ export function Settings() {
     )
   }
 
+  // Location name (human-readable, from address search)
+  const [locationName, setLocationName] = useState('')
+
   const handleSaveLocation = async () => {
     try {
       await apiFetch('/api/settings', {
@@ -217,6 +220,7 @@ export function Settings() {
           home_lat: parseFloat(homeLat),
           home_lon: parseFloat(homeLon),
           geofence_radius_m: geofenceRadius,
+          location_name: locationName || null,
         }),
       })
       setSavedLocation({ lat: homeLat, lon: homeLon })
@@ -246,6 +250,10 @@ export function Settings() {
           if (data.geofence_radius_m != null) {
             setGeofenceRadius(Number(data.geofence_radius_m))
             setSavedGeofenceRadius(Number(data.geofence_radius_m))
+          }
+          if (data.location_name) {
+            setLocationName(data.location_name)
+            setAddressQuery(data.location_name)
           }
           // Electricity tariff
           if (data.electricity_rate != null) {
@@ -623,7 +631,7 @@ export function Settings() {
             label="Home battery installed"
           />
           <Typography variant="caption" color="text.secondary" sx={{ ml: 7, mt: -1 }}>
-            Enable if you have a home battery (e.g. Solax Triple Power). Affects how solar subsidy is calculated.
+            Enable if you have a home battery (e.g. Solax Triple Power). Affects how Tesla solar subsidy is calculated.
           </Typography>
           <FormControlLabel
             control={
@@ -867,7 +875,9 @@ export function Settings() {
                     setHomeLat(r.lat)
                     setHomeLon(r.lon)
                     setAddressResults([])
-                    setAddressQuery(r.display_name.split(',').slice(0, 3).join(','))
+                    const shortName = r.display_name.split(',').slice(0, 3).join(',').trim()
+                    setAddressQuery(shortName)
+                    setLocationName(shortName)
                   }}
                   sx={{
                     px: 1.5, py: 1,

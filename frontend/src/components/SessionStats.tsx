@@ -188,7 +188,7 @@ export function SessionStats({
           }}
         >
           <Typography variant="caption" color="#f5c518" fontWeight="600">
-            Solar {Math.round(solarPct)}%
+            Solar Charged {Math.round(solarPct)}%
           </Typography>
           <Typography variant="caption" color="#3b82f6" fontWeight="600">
             Grid {Math.round(gridPct)}%
@@ -216,7 +216,7 @@ export function SessionStats({
             mb: 0.5,
           }}
         >
-          Solar Subsidy
+          Tesla Solar Subsidy
         </Typography>
         <Box
           sx={{
@@ -229,7 +229,7 @@ export function SessionStats({
             {Math.round(solarPct)}%
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            · {(session?.solar_kwh ?? 0).toFixed(1)} kWh solar
+            · {(session?.solar_kwh ?? 0).toFixed(1)} kWh from solar
           </Typography>
         </Box>
       </Box>
