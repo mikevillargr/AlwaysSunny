@@ -676,7 +676,7 @@ async def warmup_model() -> None:
     """Warm up Ollama on backend startup.
 
     Retries every 30s for up to 5 minutes if Ollama is unreachable.
-    Also ensures the fallback model is available.
+    Ensures both primary and fallback models are pulled before warming up.
     """
     import asyncio
     import logging
@@ -686,8 +686,17 @@ async def warmup_model() -> None:
     max_attempts = 10  # 10 × 30s = 5 minutes
     for attempt in range(1, max_attempts + 1):
         try:
+            # First ensure primary model is available (pulls if missing)
+            logger.info(f"Ensuring primary model available: {settings.ollama_model} (attempt {attempt})")
+            await _ensure_model_available(settings.ollama_host, settings.ollama_model)
+
+            # Also ensure fallback model is available
+            if settings.ollama_fallback_model and settings.ollama_fallback_model != settings.ollama_model:
+                await _ensure_model_available(settings.ollama_host, settings.ollama_fallback_model)
+
+            # Warm up primary model with a minimal inference
             async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15)) as client:
-                logger.info(f"Warming up Ollama model: {settings.ollama_model} (attempt {attempt})")
+                logger.info(f"Warming up Ollama model: {settings.ollama_model}")
                 resp = await client.post(
                     f"{settings.ollama_host}/api/generate",
                     json={
@@ -701,10 +710,6 @@ async def warmup_model() -> None:
                 logger.info("Ollama model warm — ready for inference")
                 global _ollama_healthy
                 _ollama_healthy = True
-
-                # Also ensure fallback model is available
-                if settings.ollama_fallback_model and settings.ollama_fallback_model != settings.ollama_model:
-                    await _ensure_model_available(settings.ollama_host, settings.ollama_fallback_model)
                 return
         except Exception as e:
             logger.warning(
