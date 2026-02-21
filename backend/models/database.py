@@ -127,6 +127,7 @@ class SettingsUpdate(BaseModel):
     panel_capacity_w: Optional[int] = None
     has_home_battery: Optional[bool] = None
     has_net_metering: Optional[bool] = None
+    currency_code: Optional[str] = None
 
 
 class SettingsResponse(BaseModel):
@@ -151,6 +152,7 @@ class SettingsResponse(BaseModel):
     panel_capacity_w: int = 0
     has_home_battery: bool = False
     has_net_metering: bool = False
+    currency_code: str = "PHP"
 
 
 # ---------------------------------------------------------------------------

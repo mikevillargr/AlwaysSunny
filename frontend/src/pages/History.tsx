@@ -13,6 +13,17 @@ import { ChevronDown, ChevronUp, Battery } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 import type { SessionRecord } from '../types/api'
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  PHP: '₱',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  AUD: 'A$',
+  CAD: 'C$',
+  SGD: 'S$',
+}
+
 function formatDuration(mins: number | null): string {
   if (!mins) return '—'
   const h = Math.floor(mins / 60)
@@ -34,7 +45,7 @@ function formatDate(iso: string | null): string {
   } catch { return '' }
 }
 
-function SessionCard({ session }: { session: SessionRecord }) {
+function SessionCard({ session, currencySymbol }: { session: SessionRecord; currencySymbol: string }) {
   const [expanded, setExpanded] = useState(false)
   const solarPct = session.solar_pct ?? 0
   const kwh = session.kwh_added ?? 0
@@ -69,7 +80,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
         </Box>
         <Box sx={{ textAlign: 'right' }}>
           <Typography variant="h6" fontWeight="700" color="#22c55e">
-            {Math.round(saved).toLocaleString()}
+            {currencySymbol}{Math.round(saved).toLocaleString()}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Saved
@@ -128,7 +139,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
                 Electricity Rate
               </Typography>
               <Typography variant="body2" fontWeight="600" color="text.primary">
-                {session.electricity_rate?.toFixed(2) ?? '—'}/kWh
+                {currencySymbol}{session.electricity_rate?.toFixed(2) ?? '—'}/kWh
               </Typography>
             </Grid>
             <Grid item xs={6}>
@@ -149,7 +160,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
                 Grid Cost Avoided
               </Typography>
               <Typography variant="body2" fontWeight="600" color="#22c55e">
-                {Math.round(saved).toLocaleString()}
+                {currencySymbol}{Math.round(saved).toLocaleString()}
               </Typography>
             </Grid>
           </Grid>
@@ -171,6 +182,21 @@ export function History() {
   const [tabValue, setTabValue] = useState(0)
   const [sessions, setSessions] = useState<SessionRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [currencySymbol, setCurrencySymbol] = useState('₱')
+
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const res = await apiFetch('/api/settings')
+        if (res.ok) {
+          const data = await res.json()
+          const code = data.currency_code || 'PHP'
+          setCurrencySymbol(CURRENCY_SYMBOLS[code] || code + ' ')
+        }
+      } catch { /* use default */ }
+    }
+    fetchSettings()
+  }, [])
 
   useEffect(() => {
     async function fetchSessions() {
@@ -217,7 +243,7 @@ export function History() {
 
   const summaryStats = [
     { label: 'All-time solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
-    { label: 'All-time saved', value: `${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
+    { label: 'All-time saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
     { label: 'Avg solar subsidy', value: `${avgSubsidy}%`, color: '#f5c518' },
     { label: 'Sessions this month', value: `${thisMonthCount}` },
   ]
@@ -296,7 +322,7 @@ export function History() {
           </Box>
         ) : (
           filtered.map((session) => (
-            <SessionCard key={session.id} session={session} />
+            <SessionCard key={session.id} session={session} currencySymbol={currencySymbol} />
           ))
         )}
       </Box>

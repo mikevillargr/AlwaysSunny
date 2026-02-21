@@ -14,7 +14,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material'
-import { Bot, Play, Shuffle, Sun, Cloud, Car, Wallet, Save, AlertTriangle, FileText, Edit3 } from 'lucide-react'
+import { Bot, Play, Shuffle, Sun, Cloud, Car, Wallet, Save, AlertTriangle, FileText, Edit3, Zap } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
 // --- Types ---
@@ -91,6 +91,12 @@ const defaultInputs = {
   session_kwh_added: 3.2,
   session_solar_pct: 82,
   current_time: '13:00',
+  has_home_battery: true,
+  has_net_metering: false,
+  panel_capacity_w: 0,
+  estimated_available_w: 0,
+  forecasted_irradiance_wm2: 0,
+  efficiency_coeff: 0,
 }
 
 const rand = (min: number, max: number) => Math.round(min + Math.random() * (max - min))
@@ -105,6 +111,8 @@ const presets = {
     grid_budget_total_kwh: 25, grid_budget_used_kwh: 2, max_grid_import_w: 7000,
     hours_until_sunset: 6, session_elapsed_mins: 30, session_kwh_added: 2.5,
     session_solar_pct: 95, current_time: '11:00',
+    has_home_battery: true, has_net_metering: false, panel_capacity_w: 0,
+    estimated_available_w: 0, forecasted_irradiance_wm2: 0, efficiency_coeff: 0,
   },
   lowSolar: {
     solar_w: 350, household_w: 900, grid_import_w: 600, battery_soc: 40,
@@ -113,6 +121,8 @@ const presets = {
     grid_budget_total_kwh: 25, grid_budget_used_kwh: 12, max_grid_import_w: 7000,
     hours_until_sunset: 2, session_elapsed_mins: 90, session_kwh_added: 6.1,
     session_solar_pct: 55, current_time: '16:00',
+    has_home_battery: true, has_net_metering: false, panel_capacity_w: 0,
+    estimated_available_w: 0, forecasted_irradiance_wm2: 0, efficiency_coeff: 0,
   },
   departure: {
     solar_w: 1200, household_w: 800, grid_import_w: 400, battery_soc: 55,
@@ -121,6 +131,8 @@ const presets = {
     grid_budget_total_kwh: 25, grid_budget_used_kwh: 8, max_grid_import_w: 7000,
     hours_until_sunset: 1.5, session_elapsed_mins: 120, session_kwh_added: 8.5,
     session_solar_pct: 60, current_time: '02:30',
+    has_home_battery: true, has_net_metering: false, panel_capacity_w: 0,
+    estimated_available_w: 0, forecasted_irradiance_wm2: 0, efficiency_coeff: 0,
   },
   budgetCrunch: {
     solar_w: 1800, household_w: 1000, grid_import_w: 500, battery_soc: 50,
@@ -129,6 +141,18 @@ const presets = {
     grid_budget_total_kwh: 10, grid_budget_used_kwh: 9.2, max_grid_import_w: 4000,
     hours_until_sunset: 4, session_elapsed_mins: 60, session_kwh_added: 5.0,
     session_solar_pct: 70, current_time: '14:00',
+    has_home_battery: true, has_net_metering: false, panel_capacity_w: 0,
+    estimated_available_w: 0, forecasted_irradiance_wm2: 0, efficiency_coeff: 0,
+  },
+  noBattery: {
+    solar_w: 800, household_w: 600, grid_import_w: 100, battery_soc: 0,
+    battery_w: 0, solar_trend: 'stable', tesla_soc: 50, target_soc: 80,
+    current_amps: 5, charging_strategy: 'solar', departure_time: '',
+    grid_budget_total_kwh: 25, grid_budget_used_kwh: 3, max_grid_import_w: 7000,
+    hours_until_sunset: 5, session_elapsed_mins: 20, session_kwh_added: 1.0,
+    session_solar_pct: 90, current_time: '12:00',
+    has_home_battery: false, has_net_metering: false, panel_capacity_w: 5000,
+    estimated_available_w: 3800, forecasted_irradiance_wm2: 820, efficiency_coeff: 4.63,
   },
 }
 
@@ -192,17 +216,21 @@ export function Admin() {
     }
   }, [aiSettings])
 
-  const updateInput = (key: string, value: string | number) => {
+  const updateInput = (key: string, value: string | number | boolean) => {
     setInputs((prev) => ({ ...prev, [key]: value }))
   }
 
   const randomize = () => {
+    const hasBattery = Math.random() > 0.4
+    const panelCap = hasBattery ? 0 : rand(3000, 8000)
+    const irr = randF(200, 900)
+    const eff = randF(3.0, 5.5)
     setInputs({
       solar_w: rand(200, 5500),
       household_w: rand(400, 1500),
       grid_import_w: rand(-500, 800),
-      battery_soc: rand(10, 95),
-      battery_w: rand(-500, 500),
+      battery_soc: hasBattery ? rand(10, 95) : 0,
+      battery_w: hasBattery ? rand(-500, 500) : 0,
       solar_trend: ['rising', 'stable', 'falling'][rand(0, 2)],
       tesla_soc: rand(15, 90),
       target_soc: rand(60, 100),
@@ -217,6 +245,12 @@ export function Admin() {
       session_kwh_added: randF(0.5, 15),
       session_solar_pct: rand(20, 100),
       current_time: `${String(rand(6, 18)).padStart(2, '0')}:${String(rand(0, 59)).padStart(2, '0')}`,
+      has_home_battery: hasBattery,
+      has_net_metering: Math.random() > 0.7,
+      panel_capacity_w: panelCap,
+      estimated_available_w: !hasBattery ? Math.min(panelCap, Math.round(irr * eff)) : 0,
+      forecasted_irradiance_wm2: !hasBattery ? irr : 0,
+      efficiency_coeff: !hasBattery ? eff : 0,
     })
   }
 
@@ -536,6 +570,37 @@ export function Admin() {
           </Grid>
         </Grid>
 
+        {/* Inverter Setup */}
+        <Typography variant="caption" color="#a855f7" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>
+          Inverter Setup
+        </Typography>
+        <Grid container spacing={1.5} sx={{ mb: 2 }}>
+          <Grid item xs={4} sm={2}>
+            <Select value={inputs.has_home_battery ? 'true' : 'false'} onChange={(e) => updateInput('has_home_battery', e.target.value === 'true')} size="small" fullWidth>
+              <MenuItem value="true">Has Battery</MenuItem>
+              <MenuItem value="false">No Battery</MenuItem>
+            </Select>
+          </Grid>
+          <Grid item xs={4} sm={2}>
+            <Select value={inputs.has_net_metering ? 'true' : 'false'} onChange={(e) => updateInput('has_net_metering', e.target.value === 'true')} size="small" fullWidth>
+              <MenuItem value="true">Net Metering</MenuItem>
+              <MenuItem value="false">No Export</MenuItem>
+            </Select>
+          </Grid>
+          <Grid item xs={4} sm={2}>
+            <TextField label="Panel Cap (W)" type="number" value={inputs.panel_capacity_w} onChange={(e) => updateInput('panel_capacity_w', +e.target.value)} size="small" fullWidth />
+          </Grid>
+          <Grid item xs={4} sm={2}>
+            <TextField label="Est. Available (W)" type="number" value={inputs.estimated_available_w} onChange={(e) => updateInput('estimated_available_w', +e.target.value)} size="small" fullWidth />
+          </Grid>
+          <Grid item xs={4} sm={2}>
+            <TextField label="Irradiance (W/m²)" type="number" value={inputs.forecasted_irradiance_wm2} onChange={(e) => updateInput('forecasted_irradiance_wm2', +e.target.value)} size="small" fullWidth />
+          </Grid>
+          <Grid item xs={4} sm={2}>
+            <TextField label="Eff. Coeff" type="number" value={inputs.efficiency_coeff} onChange={(e) => updateInput('efficiency_coeff', +e.target.value)} size="small" fullWidth inputProps={{ step: 0.1 }} />
+          </Grid>
+        </Grid>
+
         {/* Buttons */}
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
           <Button
@@ -570,6 +635,9 @@ export function Admin() {
           </Button>
           <Button variant="outlined" size="small" startIcon={<Wallet size={14} />} onClick={() => setInputs(presets.budgetCrunch)} sx={{ textTransform: 'none', borderColor: '#2a3f57', color: '#f59e0b' }}>
             Budget Crunch
+          </Button>
+          <Button variant="outlined" size="small" startIcon={<Zap size={14} />} onClick={() => setInputs(presets.noBattery)} sx={{ textTransform: 'none', borderColor: '#2a3f57', color: '#a855f7' }}>
+            No Battery
           </Button>
         </Box>
 

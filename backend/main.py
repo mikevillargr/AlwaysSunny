@@ -23,6 +23,10 @@ async def lifespan(app: FastAPI):
     print(f"[AlwaysSunny] Ollama host: {settings_config.ollama_host}")
     start_scheduler()
     print("[AlwaysSunny] Control loop scheduler started")
+    # Warm up Ollama model in background (don't block startup)
+    import asyncio
+    from services.ollama import warmup_model
+    asyncio.create_task(warmup_model())
     yield
     stop_scheduler()
     print("[AlwaysSunny] Shutting down backend...")

@@ -39,6 +39,7 @@ export function Settings() {
         method: 'POST',
         body: JSON.stringify({
           electricity_rate: parseFloat(effectiveRate) || 10.83,
+          currency_code: currency,
         }),
       })
     } catch (e) {
@@ -198,6 +199,11 @@ export function Settings() {
             const rateStr = String(data.electricity_rate)
             setEffectiveRate(rateStr)
             setSavedTariff((prev) => ({ ...prev, rate: rateStr }))
+          }
+          // Currency
+          if (data.currency_code) {
+            setCurrency(data.currency_code)
+            setSavedTariff((prev) => ({ ...prev, currency: data.currency_code }))
           }
           // Timezone
           if (data.timezone) {

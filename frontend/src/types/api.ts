@@ -157,6 +157,7 @@ export interface Settings {
   notif_session_complete: boolean
   notif_ai_override: boolean
   notif_rate_reminder: boolean
+  currency_code: string
 }
 
 // Health check types

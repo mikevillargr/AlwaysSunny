@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: Settings = {
   notif_session_complete: true,
   notif_ai_override: false,
   notif_rate_reminder: true,
+  currency_code: 'PHP',
 }
 
 interface UseSettingsReturn {

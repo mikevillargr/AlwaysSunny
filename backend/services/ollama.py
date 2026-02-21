@@ -8,7 +8,11 @@ import httpx
 
 from config import get_settings
 
-TIMEOUT = 90
+# Separate timeouts: connect should be fast, but read (inference) can be slow
+# especially on cold start when Ollama needs to load the model into VRAM
+CONNECT_TIMEOUT = 15
+READ_TIMEOUT = 180  # 7B models can take 60-120s on first call after idle
+TIMEOUT = httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
 
 
 class AIRecommendation:
@@ -440,10 +444,11 @@ async def call_ollama(
                 if attempt > 1:
                     logger.info(f"Ollama succeeded on attempt {attempt}")
                 return AIRecommendation(resp.json(), trigger_reason)
-        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError) as e:
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as e:
             last_error = e
             if attempt < max_retries:
-                wait = 2 ** attempt  # 2s, 4s
+                # Exponential backoff: 5s, 10s, 20s — gives Ollama time to load model
+                wait = 5 * (2 ** (attempt - 1))
                 logger.warning(
                     f"Ollama attempt {attempt}/{max_retries} failed "
                     f"({type(e).__name__}), retrying in {wait}s..."
@@ -457,7 +462,7 @@ async def call_ollama(
         except httpx.HTTPStatusError as e:
             # 4xx/5xx — don't retry client errors, do retry server errors
             if e.response.status_code >= 500 and attempt < max_retries:
-                wait = 2 ** attempt
+                wait = 5 * (2 ** (attempt - 1))
                 logger.warning(
                     f"Ollama attempt {attempt}/{max_retries} got {e.response.status_code}, "
                     f"retrying in {wait}s..."
@@ -472,7 +477,7 @@ async def call_ollama(
 
 async def call_ollama_text(
     prompt: str,
-    max_retries: int = 2,
+    max_retries: int = 3,
     model_override: str | None = None,
     max_tokens_override: int | None = None,
 ) -> str:
@@ -511,20 +516,50 @@ async def call_ollama_text(
                 if raw.endswith("```"):
                     raw = raw.rsplit("```", 1)[0]
                 return raw.strip()
-        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError) as e:
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as e:
             last_error = e
             if attempt < max_retries:
-                await asyncio.sleep(2 ** attempt)
+                wait = 5 * (2 ** (attempt - 1))
+                logger.warning(f"Ollama text attempt {attempt}/{max_retries} failed ({type(e).__name__}), retrying in {wait}s...")
+                await asyncio.sleep(wait)
             else:
                 logger.error(f"Ollama text call failed after {max_retries} attempts: {e}")
         except httpx.HTTPStatusError as e:
             if e.response.status_code >= 500 and attempt < max_retries:
-                await asyncio.sleep(2 ** attempt)
+                wait = 5 * (2 ** (attempt - 1))
+                await asyncio.sleep(wait)
                 last_error = e
             else:
                 raise
 
     raise last_error or Exception("Ollama text call failed after all retries")
+
+
+async def warmup_model() -> None:
+    """Send a minimal prompt to force Ollama to load the model into memory.
+
+    Call this on backend startup so the first real inference doesn't hit
+    a cold-start timeout. Failures are logged but not raised.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    settings = get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15)) as client:
+            logger.info(f"Warming up Ollama model: {settings.ollama_model}")
+            resp = await client.post(
+                f"{settings.ollama_host}/api/generate",
+                json={
+                    "model": settings.ollama_model,
+                    "prompt": "Reply OK",
+                    "stream": False,
+                    "options": {"num_predict": 5},
+                },
+            )
+            resp.raise_for_status()
+            logger.info(f"Ollama model warm — ready for inference")
+    except Exception as e:
+        logger.warning(f"Ollama warmup failed ({type(e).__name__}): {e} — first call may be slow")
 
 
 async def test_ollama_connection() -> tuple[bool, str]:

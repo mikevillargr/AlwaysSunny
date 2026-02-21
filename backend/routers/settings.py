@@ -35,6 +35,7 @@ DEFAULTS = {
     "panel_capacity_w": "0",
     "has_home_battery": "false",
     "has_net_metering": "false",
+    "currency_code": "PHP",
 }
 
 
@@ -76,6 +77,7 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
         panel_capacity_w=int(merged.get("panel_capacity_w", 0)),
         has_home_battery=_parse_bool(merged.get("has_home_battery", "false")),
         has_net_metering=_parse_bool(merged.get("has_net_metering", "false")),
+        currency_code=merged.get("currency_code", "PHP"),
     )
 
 

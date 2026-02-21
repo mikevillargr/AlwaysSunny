@@ -47,6 +47,12 @@ class AITestRequest(BaseModel):
         "17:00 | 120 W/m² | 380W  | 40% cloud"
     )
     minutes_to_full_charge: int = 0
+    has_home_battery: bool = True
+    has_net_metering: bool = False
+    panel_capacity_w: int = 0
+    estimated_available_w: float = 0.0
+    forecasted_irradiance_wm2: float = 0.0
+    efficiency_coeff: float = 0.0
     custom_prompt: Optional[str] = None
 
 
@@ -75,6 +81,12 @@ def _build_test_prompt(body: AITestRequest, grid_remaining: float) -> str:
         session_solar_pct=body.session_solar_pct,
         current_time=body.current_time,
         minutes_to_full_charge=body.minutes_to_full_charge,
+        has_home_battery=body.has_home_battery,
+        has_net_metering=body.has_net_metering,
+        panel_capacity_w=body.panel_capacity_w,
+        estimated_available_w=body.estimated_available_w,
+        forecasted_irradiance_wm2=body.forecasted_irradiance_wm2,
+        efficiency_coeff=body.efficiency_coeff,
     )
 
 
