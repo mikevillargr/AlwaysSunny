@@ -338,7 +338,7 @@ export function SessionStats({
             SAVED
           </Typography>
           <Typography variant="body1" fontWeight="700" color="#22c55e">
-            ₱{Math.round(session?.saved_pesos ?? 0).toLocaleString()}
+            {Math.round(session?.saved_amount ?? 0).toLocaleString()}
           </Typography>
         </Grid>
       </Grid>

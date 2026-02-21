@@ -55,7 +55,7 @@ export const SAMPLE_STATUS = {
     solar_kwh: 7.1,
     grid_kwh: 1.3,
     solar_pct: 85,
-    saved_pesos: 710,
+    saved_amount: 710,
   },
   forecast: {
     sunrise: '05:58',

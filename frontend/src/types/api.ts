@@ -72,7 +72,7 @@ export interface Session {
   solar_kwh: number
   grid_kwh: number
   solar_pct: number
-  saved_pesos: number
+  saved_amount: number
 }
 
 export interface StatusResponse {
@@ -130,8 +130,8 @@ export interface SessionRecord {
   solar_kwh: number
   grid_kwh: number
   solar_pct: number
-  saved_pesos: number
-  meralco_rate: number
+  saved_amount: number
+  electricity_rate: number
   start_soc: number
   end_soc: number
   target_soc: number
@@ -143,8 +143,8 @@ export interface Settings {
   default_charging_amps: number
   daily_grid_budget_kwh: number
   max_grid_import_w: number
-  meralco_rate: number | null
-  meralco_rate_updated_at: string | null
+  electricity_rate: number | null
+  electricity_rate_updated_at: string | null
   home_lat: number | null
   home_lon: number | null
   telegram_chat_id: string | null

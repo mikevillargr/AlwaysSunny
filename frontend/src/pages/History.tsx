@@ -40,7 +40,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
   const kwh = session.kwh_added ?? 0
   const solar = session.solar_kwh ?? 0
   const grid = session.grid_kwh ?? 0
-  const saved = session.saved_pesos ?? 0
+  const saved = session.saved_amount ?? 0
   const isActive = !session.ended_at
 
   return (
@@ -69,7 +69,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
         </Box>
         <Box sx={{ textAlign: 'right' }}>
           <Typography variant="h6" fontWeight="700" color="#22c55e">
-            ₱{Math.round(saved).toLocaleString()}
+            {Math.round(saved).toLocaleString()}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Saved
@@ -125,10 +125,10 @@ function SessionCard({ session }: { session: SessionRecord }) {
             </Grid>
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Meralco Rate
+                Electricity Rate
               </Typography>
               <Typography variant="body2" fontWeight="600" color="text.primary">
-                ₱{session.meralco_rate?.toFixed(2) ?? '—'}/kWh
+                {session.electricity_rate?.toFixed(2) ?? '—'}/kWh
               </Typography>
             </Grid>
             <Grid item xs={6}>
@@ -144,7 +144,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
                 Grid Cost Avoided
               </Typography>
               <Typography variant="body2" fontWeight="600" color="#22c55e">
-                ₱{Math.round(saved).toLocaleString()}
+                {Math.round(saved).toLocaleString()}
               </Typography>
             </Grid>
           </Grid>
@@ -205,14 +205,14 @@ export function History() {
   // Compute summary stats from completed sessions only
   const completed = sessions.filter((s) => s.ended_at && s.kwh_added && s.kwh_added > 0)
   const totalSolarKwh = completed.reduce((sum, s) => sum + (s.solar_kwh ?? 0), 0)
-  const totalSaved = completed.reduce((sum, s) => sum + (s.saved_pesos ?? 0), 0)
+  const totalSaved = completed.reduce((sum, s) => sum + (s.saved_amount ?? 0), 0)
   const totalKwh = completed.reduce((sum, s) => sum + (s.kwh_added ?? 0), 0)
   const avgSubsidy = totalKwh > 0 ? Math.round((totalSolarKwh / totalKwh) * 100) : 0
   const thisMonthCount = sessions.filter((s) => new Date(s.started_at) >= thisMonthStart).length
 
   const summaryStats = [
     { label: 'All-time solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
-    { label: 'All-time saved', value: `₱${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
+    { label: 'All-time saved', value: `${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
     { label: 'Avg solar subsidy', value: `${avgSubsidy}%`, color: '#f5c518' },
     { label: 'Sessions this month', value: `${thisMonthCount}` },
   ]

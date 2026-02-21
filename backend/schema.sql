@@ -66,8 +66,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     solar_kwh REAL,
     grid_kwh REAL,
     solar_pct REAL,
-    saved_pesos REAL,
-    meralco_rate REAL,
+    saved_amount REAL,
+    electricity_rate REAL,
     start_soc INTEGER,
     end_soc INTEGER,
     target_soc INTEGER
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS daily_summary (
     total_solar_kwh REAL DEFAULT 0,
     total_grid_kwh REAL DEFAULT 0,
     total_sessions INTEGER DEFAULT 0,
-    total_saved_pesos REAL DEFAULT 0,
+    total_saved_amount REAL DEFAULT 0,
     avg_solar_pct REAL DEFAULT 0,
     PRIMARY KEY (user_id, date)
 );

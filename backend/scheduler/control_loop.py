@@ -663,7 +663,7 @@ async def _control_tick(user_id: str) -> None:
             logger.error(f"[{state.user_id[:8]}] Tesla command failed: {e}")
 
     # 7. Session tracking — recover from DB on restart if car is already plugged in
-    meralco_rate = float(state.settings.get("meralco_rate", 10.83))
+    electricity_rate = float(state.settings.get("electricity_rate", 10.83))
     if not state.session_tracker._recovered and tesla.charge_port_connected:
         db_active = get_active_session(user_id)
         if db_active:
@@ -675,7 +675,7 @@ async def _control_tick(user_id: str) -> None:
                 # No persisted value — use current (grid_kwh will be 0 until next session)
                 start_grid_kwh = solax.consume_energy_kwh
                 logger.warning(f"[{state.user_id[:8]}] No persisted start_grid_kwh — using current value")
-            state.session_tracker.recover_from_db(db_active, start_grid_kwh, meralco_rate)
+            state.session_tracker.recover_from_db(db_active, start_grid_kwh, electricity_rate)
             logger.info(f"[{state.user_id[:8]}] Recovered session #{db_active['id']}, start_grid_kwh={start_grid_kwh:.2f}")
         else:
             state.session_tracker._recovered = True  # No DB session to recover
@@ -688,7 +688,7 @@ async def _control_tick(user_id: str) -> None:
         tesla_soc=tesla.battery_level,
         target_soc=int(state.settings.get("target_soc", 100)),
         consume_energy_kwh=solax.consume_energy_kwh,
-        meralco_rate=meralco_rate,
+        electricity_rate=electricity_rate,
         charge_energy_added=tesla.charge_energy_added,
     )
 

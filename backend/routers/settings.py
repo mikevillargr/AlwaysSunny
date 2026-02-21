@@ -19,8 +19,8 @@ DEFAULTS = {
     "daily_grid_budget_kwh": "25.0",
     "max_grid_import_w": "7000",
     "tessie_enabled": "true",
-    "meralco_rate": "10.83",
-    "meralco_rate_updated_at": "",
+    "electricity_rate": "10.83",
+    "electricity_rate_updated_at": "",
     "home_lat": "",
     "home_lon": "",
     "telegram_chat_id": "",
@@ -56,8 +56,8 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
         default_charging_amps=int(merged.get("default_charging_amps", 8)),
         daily_grid_budget_kwh=float(merged.get("daily_grid_budget_kwh", 5.0)),
         max_grid_import_w=float(merged.get("max_grid_import_w", 500)),
-        meralco_rate=_parse_optional_float(merged.get("meralco_rate", "")),
-        meralco_rate_updated_at=merged.get("meralco_rate_updated_at") or None,
+        electricity_rate=_parse_optional_float(merged.get("electricity_rate", "")),
+        electricity_rate_updated_at=merged.get("electricity_rate_updated_at") or None,
         home_lat=_parse_optional_float(merged.get("home_lat", "")),
         home_lon=_parse_optional_float(merged.get("home_lon", "")),
         telegram_chat_id=merged.get("telegram_chat_id") or None,
@@ -94,9 +94,9 @@ async def update_settings(
         str_value = str(value).lower() if isinstance(value, bool) else str(value)
         upsert_user_setting(user_id, field, str_value)
 
-        # Track when meralco_rate was last updated
-        if field == "meralco_rate":
-            upsert_user_setting(user_id, "meralco_rate_updated_at", now)
+        # Track when electricity_rate was last updated
+        if field == "electricity_rate":
+            upsert_user_setting(user_id, "electricity_rate_updated_at", now)
 
     # Return full updated settings
     raw = get_user_settings(user_id)

@@ -34,7 +34,7 @@ class Session(BaseModel):
     solar_kwh: float
     grid_kwh: float
     solar_pct: float
-    saved_pesos: float
+    saved_amount: float
 
 
 class StatusResponse(BaseModel):
@@ -95,8 +95,8 @@ class SessionRecord(BaseModel):
     solar_kwh: Optional[float] = None
     grid_kwh: Optional[float] = None
     solar_pct: Optional[float] = None
-    saved_pesos: Optional[float] = None
-    meralco_rate: Optional[float] = None
+    saved_amount: Optional[float] = None
+    electricity_rate: Optional[float] = None
     start_soc: Optional[int] = None
     end_soc: Optional[int] = None
     target_soc: Optional[int] = None
@@ -111,7 +111,7 @@ class SettingsUpdate(BaseModel):
     default_charging_amps: Optional[int] = None
     daily_grid_budget_kwh: Optional[float] = None
     max_grid_import_w: Optional[float] = None
-    meralco_rate: Optional[float] = None
+    electricity_rate: Optional[float] = None
     home_lat: Optional[float] = None
     home_lon: Optional[float] = None
     telegram_chat_id: Optional[str] = None
@@ -130,8 +130,8 @@ class SettingsResponse(BaseModel):
     default_charging_amps: int = 8
     daily_grid_budget_kwh: float = 25.0
     max_grid_import_w: float = 7000
-    meralco_rate: Optional[float] = 10.83
-    meralco_rate_updated_at: Optional[str] = None
+    electricity_rate: Optional[float] = 10.83
+    electricity_rate_updated_at: Optional[str] = None
     home_lat: Optional[float] = None
     home_lon: Optional[float] = None
     telegram_chat_id: Optional[str] = None

@@ -17,14 +17,14 @@ class ActiveSession:
     start_soc: int = 0
     target_soc: int = 80
     start_grid_kwh: float = 0.0  # cumulative consumeenergy at session start
-    meralco_rate: float = 10.83
+    electricity_rate: float = 10.83
 
     # Live-updated each tick
     kwh_added: float = 0.0
     grid_kwh: float = 0.0
     solar_kwh: float = 0.0
     solar_pct: float = 0.0
-    saved_pesos: float = 0.0
+    saved_amount: float = 0.0
     current_soc: int = 0
 
     @property
@@ -64,7 +64,7 @@ class ActiveSession:
             self.solar_pct = 0.0
 
         # Money saved
-        self.saved_pesos = round(self.solar_kwh * self.meralco_rate, 2)
+        self.saved_amount = round(self.solar_kwh * self.electricity_rate, 2)
 
     def to_api_dict(self) -> dict:
         """Return session data for /api/status response."""
@@ -75,7 +75,7 @@ class ActiveSession:
             "solar_kwh": round(self.solar_kwh, 1),
             "grid_kwh": round(self.grid_kwh, 1),
             "solar_pct": self.solar_pct,
-            "saved_pesos": round(self.saved_pesos, 0),
+            "saved_amount": round(self.saved_amount, 0),
         }
 
     def to_db_final(self) -> dict:
@@ -87,8 +87,8 @@ class ActiveSession:
             "solar_kwh": round(self.solar_kwh, 2),
             "grid_kwh": round(self.grid_kwh, 2),
             "solar_pct": round(self.solar_pct, 1),
-            "saved_pesos": round(self.saved_pesos, 2),
-            "meralco_rate": self.meralco_rate,
+            "saved_amount": round(self.saved_amount, 2),
+            "electricity_rate": self.electricity_rate,
             "end_soc": self.current_soc,
         }
 
@@ -105,14 +105,14 @@ class SessionTracker:
         self,
         db_session: dict | None,
         start_grid_kwh: float,
-        meralco_rate: float,
+        electricity_rate: float,
     ) -> None:
         """Recover an active session from the DB after backend restart.
 
         Args:
             db_session: The active session row from the DB.
             start_grid_kwh: The persisted consumeenergy value at session start.
-            meralco_rate: Current Meralco rate.
+            electricity_rate: Current Meralco rate.
         """
         if not db_session or self._recovered:
             return
@@ -124,7 +124,7 @@ class SessionTracker:
             start_soc=db_session.get("start_soc", 0),
             target_soc=db_session.get("target_soc", 80),
             start_grid_kwh=start_grid_kwh,
-            meralco_rate=meralco_rate,
+            electricity_rate=electricity_rate,
         )
         self._prev_plugged_in = True
 
@@ -137,7 +137,7 @@ class SessionTracker:
         tesla_soc: int,
         target_soc: int,
         consume_energy_kwh: float,
-        meralco_rate: float,
+        electricity_rate: float,
         charge_energy_added: float = 0.0,
     ) -> tuple[str | None, dict | None]:
         """Called every control loop tick. Returns (event, data).
@@ -153,7 +153,7 @@ class SessionTracker:
                 start_soc=tesla_soc,
                 target_soc=target_soc,
                 start_grid_kwh=consume_energy_kwh,
-                meralco_rate=meralco_rate,
+                electricity_rate=electricity_rate,
             )
             self._prev_plugged_in = True
             return "started", {
@@ -161,7 +161,7 @@ class SessionTracker:
                 "started_at": datetime.now(timezone.utc).isoformat(),
                 "start_soc": tesla_soc,
                 "target_soc": target_soc,
-                "meralco_rate": meralco_rate,
+                "electricity_rate": electricity_rate,
             }
 
         # Detect session end
@@ -176,7 +176,7 @@ class SessionTracker:
 
             if should_end:
                 # Final update before ending — use latest rate
-                self.active.meralco_rate = meralco_rate
+                self.active.electricity_rate = electricity_rate
                 self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
                 final_data = self.active.to_db_final()
                 db_id = self.active.db_session_id
@@ -185,7 +185,7 @@ class SessionTracker:
                 return "ended", {"db_session_id": db_id, **final_data}
 
             # Session still active — update stats and keep rate current
-            self.active.meralco_rate = meralco_rate
+            self.active.electricity_rate = electricity_rate
             self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
             self._prev_plugged_in = plugged_in
             return "updated", self.active.to_api_dict()

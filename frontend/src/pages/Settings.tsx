@@ -38,7 +38,7 @@ export function Settings() {
       await apiFetch('/api/settings', {
         method: 'POST',
         body: JSON.stringify({
-          meralco_rate: parseFloat(effectiveRate) || 10.83,
+          electricity_rate: parseFloat(effectiveRate) || 10.83,
         }),
       })
     } catch (e) {
@@ -166,8 +166,8 @@ export function Settings() {
             setSavedLocation((prev) => ({ ...prev, lon: String(data.home_lon) }))
           }
           // Electricity tariff
-          if (data.meralco_rate != null) {
-            const rateStr = String(data.meralco_rate)
+          if (data.electricity_rate != null) {
+            const rateStr = String(data.electricity_rate)
             setEffectiveRate(rateStr)
             setSavedTariff((prev) => ({ ...prev, rate: rateStr }))
           }
