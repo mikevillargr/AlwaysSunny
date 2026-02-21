@@ -6,39 +6,25 @@ import {
   TextField,
   Button,
   Alert,
-  Tabs,
-  Tab,
   CircularProgress,
 } from '@mui/material'
 import { Sun, Zap } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export function Login() {
-  const { signIn, signUp } = useAuth()
-  const [tab, setTab] = useState(0)
+  const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setSuccess(null)
     setLoading(true)
 
-    if (tab === 0) {
-      const { error } = await signIn(email, password)
-      if (error) setError(error)
-    } else {
-      const { error } = await signUp(email, password)
-      if (error) {
-        setError(error)
-      } else {
-        setSuccess('Account created! Check your email to confirm, then sign in.')
-      }
-    }
+    const { error } = await signIn(email, password)
+    if (error) setError(error)
     setLoading(false)
   }
 
@@ -93,21 +79,6 @@ export function Login() {
           </Box>
         </Box>
 
-        {/* Tabs */}
-        <Tabs
-          value={tab}
-          onChange={(_, v) => {
-            setTab(v)
-            setError(null)
-            setSuccess(null)
-          }}
-          variant="fullWidth"
-          sx={{ mb: 3 }}
-        >
-          <Tab label="Sign In" />
-          <Tab label="Sign Up" />
-        </Tabs>
-
         {/* Form */}
         <form onSubmit={handleSubmit}>
           <TextField
@@ -128,7 +99,7 @@ export function Login() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             sx={{ mb: 3 }}
-            autoComplete={tab === 0 ? 'current-password' : 'new-password'}
+            autoComplete="current-password"
             inputProps={{ minLength: 6 }}
           />
 
@@ -137,12 +108,6 @@ export function Login() {
               {error}
             </Alert>
           )}
-          {success && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              {success}
-            </Alert>
-          )}
-
           <Button
             type="submit"
             variant="contained"
@@ -158,10 +123,8 @@ export function Login() {
           >
             {loading ? (
               <CircularProgress size={24} sx={{ color: '#0b1929' }} />
-            ) : tab === 0 ? (
-              'Sign In'
             ) : (
-              'Create Account'
+              'Sign In'
             )}
           </Button>
         </form>

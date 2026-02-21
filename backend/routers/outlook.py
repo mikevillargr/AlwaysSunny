@@ -65,16 +65,20 @@ def _build_outlook_prompt(state) -> str:
     is_night = hours_until_sunset <= 0 or solar_w < 10
 
     # Situation assessment (pre-computed so the AI doesn't hallucinate)
+    # IMPORTANT: Charging is ALWAYS possible — it just draws from the grid when solar is insufficient.
+    # The minimum for 5A charging is ~1,200W total (not surplus).
+    grid_draw_at_5a = max(0, 1200 - surplus_w)
     if is_night:
         situation = f"""SITUATION: It is nighttime (or past sunset). Solar yield is {solar_w:.0f}W — effectively zero.
-The grid is already importing {grid_import_w:.0f}W for household use. Any EV charging will add on top of that — e.g. 5A charging adds ~1,200W to the existing {grid_import_w:.0f}W grid draw."""
+Charging IS still possible but will draw entirely from the grid. 5A charging draws ~1,200W from grid.
+The grid is already importing {grid_import_w:.0f}W for household use — EV charging adds on top of that."""
     elif surplus_w < 700:
         situation = f"""SITUATION: Solar yield is low at {solar_w:.0f}W with {household_w:.0f}W household demand.
-Surplus of only {surplus_w:.0f}W — not enough to charge (minimum ~1,200W needed for 5A).
-The grid is already importing {grid_import_w:.0f}W. Any EV charging will add on top of that existing grid draw."""
+Solar surplus is only {surplus_w:.0f}W. Charging IS possible but will draw ~{grid_draw_at_5a:.0f}W from the grid at 5A.
+The grid is already importing {grid_import_w:.0f}W for household use — EV charging adds on top of that."""
     elif surplus_w < 1200:
         situation = f"""SITUATION: Solar yield is {solar_w:.0f}W with {household_w:.0f}W household demand.
-Surplus of {surplus_w:.0f}W — borderline. Can sustain 5A with minor grid draw (~{1200 - surplus_w:.0f}W from grid)."""
+Surplus of {surplus_w:.0f}W — can sustain 5A with minor grid draw (~{grid_draw_at_5a:.0f}W from grid)."""
     else:
         max_solar_amps = min(32, int(surplus_w / 240))
         situation = f"""SITUATION: Good solar conditions. Yield is {solar_w:.0f}W with {household_w:.0f}W household demand.
@@ -102,8 +106,9 @@ Hours of sun left: {hours_until_sunset:.1f}h
 {irradiance_curve}
 
 RULES:
-- Be HONEST. If it's night or there's no solar, say so clearly. Do not pretend solar is available.
-- If charging now means grid draw, say that directly.
+- NEVER say charging is impossible or "can't charge". The Tesla CAN always charge — it just draws from the grid when solar is insufficient.
+- Be HONEST about the grid cost. If charging now means grid draw, say that directly with the estimated wattage.
+- If it's night or there's no solar, say so clearly. Do not pretend solar is available.
 - Reference specific numbers from the actual readings above.
 - Mention what to expect in the next 2-3 hours based on the forecast.
 - 2-3 sentences max. Plain conversational English. NO JSON, NO code, NO brackets, NO formatting."""

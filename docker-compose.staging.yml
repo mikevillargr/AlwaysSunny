@@ -1,0 +1,44 @@
+# Staging environment — runs alongside production on the same VPS
+# Deploy: docker compose -f docker-compose.staging.yml up -d --build
+# Access: http://<VPS_IP>:8080
+#
+# Uses the same Supabase project and Ollama instance as production,
+# but separate containers and a different port.
+
+services:
+  backend-staging:
+    build: ./backend
+    container_name: alwayssunny-backend-staging
+    env_file: ./backend/.env
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - alwayssunny-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  frontend-staging:
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      dockerfile: Dockerfile.staging
+    container_name: alwayssunny-frontend-staging
+    ports:
+      - "8080:80"
+    depends_on:
+      backend-staging:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - alwayssunny-net
+
+networks:
+  alwayssunny-net:
+    external: true
