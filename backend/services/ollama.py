@@ -417,6 +417,7 @@ async def _generate(
     if format_json:
         payload["format"] = "json"
 
+    global _ollama_healthy
     last_error: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
@@ -428,6 +429,7 @@ async def _generate(
                 resp.raise_for_status()
                 if attempt > 1:
                     logger.info(f"Ollama [{model}] succeeded on attempt {attempt}")
+                _ollama_healthy = True
                 return resp.json()
         except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as e:
             last_error = e
@@ -455,6 +457,7 @@ async def _generate(
             else:
                 raise
 
+    _ollama_healthy = False
     raise last_error or Exception(f"Ollama [{model}] call failed after all retries")
 
 
