@@ -104,6 +104,21 @@ class SolarForecast:
             "hourly": daylight_hours,
         }
 
+    def get_current_irradiance(self, timezone: str = "Asia/Manila") -> float:
+        """Get the irradiance (W/m²) for the current hour from cached forecast."""
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        try:
+            now_hour_str = datetime.now(ZoneInfo(timezone)).strftime("%H:00")
+        except Exception:
+            now_hour_str = datetime.now().strftime("%H:00")
+        for h in self.hourly:
+            if h["hour"] == now_hour_str:
+                return h["irradiance_wm2"]
+        return 0.0
+
     def build_irradiance_curve_for_ai(self) -> str:
         """Build irradiance curve string for AI prompt context."""
         now_hour = datetime.now().strftime("%H:00")

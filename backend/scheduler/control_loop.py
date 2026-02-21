@@ -297,6 +297,32 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
         # The is_fresh check will naturally expire it after 6 min
 
 
+def _estimate_available_w(state: UserLoopState) -> tuple[float, float, float]:
+    """Estimate true available solar watts for no-battery setups.
+
+    Uses Open-Meteo irradiance forecast × efficiency coefficient, capped at panel capacity.
+    Returns (estimated_available_w, forecasted_irradiance_wm2, efficiency_coeff).
+    Returns (0, 0, 0) if estimation is not possible.
+    """
+    panel_capacity_w = int(state.settings.get("panel_capacity_w", 0))
+    has_home_battery = state.settings.get("has_home_battery", "false").lower() == "true"
+
+    if panel_capacity_w <= 0 or has_home_battery or not state.forecast:
+        return 0.0, 0.0, 0.0
+
+    user_tz = state.settings.get("timezone", "Asia/Manila")
+    irradiance = state.forecast.get_current_irradiance(user_tz)
+    if irradiance <= 0:
+        return 0.0, irradiance, 0.0
+
+    # efficiency_coeff: watts produced per W/m² of irradiance
+    # Derived from panel_capacity_w and typical peak irradiance (~1000 W/m²)
+    # e.g. 5000W panels / 1000 W/m² = 5.0 W per W/m²
+    efficiency_coeff = panel_capacity_w / 1000.0
+    estimated = min(panel_capacity_w, irradiance * efficiency_coeff)
+    return estimated, irradiance, efficiency_coeff
+
+
 def _apply_grid_import_limit(
     target_amps: int,
     current_amps: int,
@@ -435,16 +461,22 @@ async def _control_tick(user_id: str) -> None:
         if state.forecast:
             is_after_sunset = state.forecast.hours_until_sunset() <= 0
         
-        solar_yield_zero = solax.solar_w <= 0
+        # For no-battery setups, use estimated available instead of measured yield
+        # (inverter self-limits, so solar_w can be 0 even on a sunny day)
+        estimated_w, _, _ = _estimate_available_w(state)
+        if estimated_w > 0:
+            solar_available_zero = estimated_w <= 0
+        else:
+            solar_available_zero = solax.solar_w <= 0
         
         if is_after_sunset:
             state.ai_status = "suspended_night"
             state.mode = "Suspended – Night"
             logger.debug(f"[{state.user_id[:8]}] AI suspended: after sunset")
             # Don't call AI, fall through to rule-based
-        elif solar_yield_zero:
+        elif solar_available_zero:
             state.ai_status = "suspended_no_solar"
-            logger.debug(f"[{state.user_id[:8]}] AI suspended: zero solar yield")
+            logger.debug(f"[{state.user_id[:8]}] AI suspended: zero solar availability")
             # Don't call AI, fall through to rule-based
         else:
             # AI is active — evaluate triggers
@@ -543,7 +575,13 @@ async def _control_tick(user_id: str) -> None:
         elif charging_strategy == "solar":
             # === SOLAR-FIRST STRATEGY ===
             # Only charge from solar surplus. Pause when no surplus.
-            solar_surplus_w = solax.solar_w - solax.household_demand_w
+            estimated_w, _, _ = _estimate_available_w(state)
+            if estimated_w > 0:
+                # No-battery setup: use forecast-based estimate as true available
+                solar_surplus_w = estimated_w - solax.household_demand_w
+            else:
+                # Battery setup or unknown panels: use measured surplus
+                solar_surplus_w = solax.solar_w - solax.household_demand_w
             state.solar_buffer.append(solar_surplus_w)
             smoothed = state.smoothed_available_w
             target_amps = int(smoothed / circuit_voltage)
@@ -599,7 +637,13 @@ async def _control_tick(user_id: str) -> None:
                     pass
 
             # Start with solar surplus calculation
-            solar_surplus_w = solax.solar_w - solax.household_demand_w
+            estimated_w, _, _ = _estimate_available_w(state)
+            if estimated_w > 0:
+                # No-battery setup: use forecast-based estimate as true available
+                solar_surplus_w = estimated_w - solax.household_demand_w
+            else:
+                # Battery setup or unknown panels: use measured surplus
+                solar_surplus_w = solax.solar_w - solax.household_demand_w
             grid_allowance_w = grid_import_limit_w if grid_budget_remaining > 0 else 0
             available_w = solar_surplus_w + grid_allowance_w
             state.solar_buffer.append(available_w)
