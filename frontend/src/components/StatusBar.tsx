@@ -88,6 +88,7 @@ export function StatusBar(props: StatusBarProps) {
           color: aiColor,
           height: 32,
           px: 1,
+          mr: 'auto',
         }}
       />
 

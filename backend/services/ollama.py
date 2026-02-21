@@ -660,8 +660,8 @@ async def _ensure_model_available(host: str, model: str) -> None:
             if model in model_names:
                 return
             # Model not found — pull it
-            logger.info(f"Pulling Ollama model: {model}")
-            async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=15)) as pull_client:
+            logger.info(f"Pulling Ollama model: {model} (this may take several minutes for large models)")
+            async with httpx.AsyncClient(timeout=httpx.Timeout(1800, connect=15)) as pull_client:
                 pull_resp = await pull_client.post(
                     f"{host}/api/pull",
                     json={"name": model, "stream": False},
@@ -683,10 +683,19 @@ async def warmup_model() -> None:
     logger = logging.getLogger(__name__)
     settings = get_settings()
 
+    global _ollama_healthy
     max_attempts = 10  # 10 × 30s = 5 minutes
     for attempt in range(1, max_attempts + 1):
         try:
-            # First ensure primary model is available (pulls if missing)
+            # Quick connectivity check first — set healthy as soon as Ollama responds
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10, connect=5)) as client:
+                resp = await client.get(f"{settings.ollama_host}/api/tags")
+                resp.raise_for_status()
+                if not _ollama_healthy:
+                    _ollama_healthy = True
+                    logger.info("Ollama is reachable — marked healthy")
+
+            # Ensure primary model is available (pulls if missing — may take minutes)
             logger.info(f"Ensuring primary model available: {settings.ollama_model} (attempt {attempt})")
             await _ensure_model_available(settings.ollama_host, settings.ollama_model)
 
@@ -708,8 +717,6 @@ async def warmup_model() -> None:
                 )
                 resp.raise_for_status()
                 logger.info("Ollama model warm — ready for inference")
-                global _ollama_healthy
-                _ollama_healthy = True
                 return
         except Exception as e:
             logger.warning(
@@ -732,8 +739,13 @@ async def ollama_health_monitor() -> None:
     import logging
     logger = logging.getLogger(__name__)
 
+    # Run first check immediately, then every 60s
+    first_run = True
     while True:
-        await asyncio.sleep(60)
+        if first_run:
+            first_run = False
+        else:
+            await asyncio.sleep(60)
         ok, detail = await check_ollama_health()
         if ok:
             continue
