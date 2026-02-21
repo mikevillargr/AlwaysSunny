@@ -4,6 +4,8 @@ services:
     container_name: alwayssunny-backend
     env_file: ./backend/.env
     restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - alwayssunny-net
     healthcheck:

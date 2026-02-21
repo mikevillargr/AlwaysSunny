@@ -387,6 +387,77 @@ Respond ONLY in JSON (no preamble, no explanation outside JSON):
 {{"recommended_amps": <int 0-32>, "reasoning": "<1-2 sentences with specific numbers>", "confidence": "low|medium|high"}}"""
 
 
+async def _generate(
+    host: str,
+    model: str,
+    prompt: str,
+    *,
+    format_json: bool = False,
+    temperature: float = 0.1,
+    num_predict: int = 150,
+    max_retries: int = 3,
+) -> dict:
+    """Low-level Ollama /api/generate call with retries.
+
+    Returns the raw JSON response dict. Raises on total failure.
+    """
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+
+    payload: dict = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": temperature,
+            "num_predict": num_predict,
+        },
+    }
+    if format_json:
+        payload["format"] = "json"
+
+    last_error: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                resp = await client.post(
+                    f"{host}/api/generate",
+                    json=payload,
+                )
+                resp.raise_for_status()
+                if attempt > 1:
+                    logger.info(f"Ollama [{model}] succeeded on attempt {attempt}")
+                return resp.json()
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as e:
+            last_error = e
+            if attempt < max_retries:
+                wait = 5 * (2 ** (attempt - 1))
+                logger.warning(
+                    f"Ollama [{model}] attempt {attempt}/{max_retries} failed "
+                    f"({type(e).__name__}), retrying in {wait}s..."
+                )
+                await asyncio.sleep(wait)
+            else:
+                logger.error(
+                    f"Ollama [{model}] failed after {max_retries} attempts: "
+                    f"{type(e).__name__}: {e}"
+                )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500 and attempt < max_retries:
+                wait = 5 * (2 ** (attempt - 1))
+                logger.warning(
+                    f"Ollama [{model}] attempt {attempt}/{max_retries} got "
+                    f"{e.response.status_code}, retrying in {wait}s..."
+                )
+                await asyncio.sleep(wait)
+                last_error = e
+            else:
+                raise
+
+    raise last_error or Exception(f"Ollama [{model}] call failed after all retries")
+
+
 async def call_ollama(
     prompt: str,
     trigger_reason: str = "scheduled",
@@ -397,25 +468,9 @@ async def call_ollama(
 ) -> AIRecommendation:
     """Call Ollama API and return parsed recommendation.
 
-    Retries up to max_retries times with exponential backoff on timeout
-    or connection errors. Non-retryable errors (4xx) raise immediately.
-
-    Args:
-        prompt: Full prompt string
-        trigger_reason: Why this AI call was triggered
-        max_retries: Number of attempts before giving up
-        model_override: Override the default model (from admin settings)
-        temperature_override: Override the default temperature
-        max_tokens_override: Override the default max tokens
-
-    Returns:
-        AIRecommendation with parsed result
-
-    Raises:
-        httpx.HTTPError: on non-retryable HTTP errors
-        TimeoutError: if all retries exhausted
+    Tries the primary model first. If all retries fail with a connection
+    or timeout error, falls back to the lighter fallback model.
     """
-    import asyncio
     import logging
     logger = logging.getLogger(__name__)
     settings = get_settings()
@@ -423,56 +478,53 @@ async def call_ollama(
     temperature = temperature_override if temperature_override is not None else 0.1
     num_predict = max_tokens_override or 150
 
-    last_error: Exception | None = None
-    for attempt in range(1, max_retries + 1):
-        try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                resp = await client.post(
-                    f"{settings.ollama_host}/api/generate",
-                    json={
-                        "model": model,
-                        "prompt": prompt,
-                        "format": "json",
-                        "stream": False,
-                        "options": {
-                            "temperature": temperature,
-                            "num_predict": num_predict,
-                        },
-                    },
-                )
-                resp.raise_for_status()
-                if attempt > 1:
-                    logger.info(f"Ollama succeeded on attempt {attempt}")
-                return AIRecommendation(resp.json(), trigger_reason)
-        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as e:
-            last_error = e
-            if attempt < max_retries:
-                # Exponential backoff: 5s, 10s, 20s — gives Ollama time to load model
-                wait = 5 * (2 ** (attempt - 1))
-                logger.warning(
-                    f"Ollama attempt {attempt}/{max_retries} failed "
-                    f"({type(e).__name__}), retrying in {wait}s..."
-                )
-                await asyncio.sleep(wait)
-            else:
-                logger.error(
-                    f"Ollama failed after {max_retries} attempts: "
-                    f"{type(e).__name__}: {e}"
-                )
-        except httpx.HTTPStatusError as e:
-            # 4xx/5xx — don't retry client errors, do retry server errors
-            if e.response.status_code >= 500 and attempt < max_retries:
-                wait = 5 * (2 ** (attempt - 1))
-                logger.warning(
-                    f"Ollama attempt {attempt}/{max_retries} got {e.response.status_code}, "
-                    f"retrying in {wait}s..."
-                )
-                await asyncio.sleep(wait)
-                last_error = e
-            else:
+    # --- Try primary model ---
+    try:
+        raw = await _generate(
+            settings.ollama_host, model, prompt,
+            format_json=True, temperature=temperature,
+            num_predict=num_predict, max_retries=max_retries,
+        )
+        return AIRecommendation(raw, trigger_reason)
+    except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError,
+            httpx.PoolTimeout, Exception) as primary_err:
+        # Only fall back for connection/timeout errors, not parse errors
+        if not isinstance(primary_err, (httpx.ReadTimeout, httpx.ConnectTimeout,
+                                         httpx.ConnectError, httpx.PoolTimeout)):
+            # Check if it's our wrapped "failed after all retries" message
+            if "failed after all retries" not in str(primary_err):
                 raise
 
-    raise last_error or Exception("Ollama call failed after all retries")
+        fallback = settings.ollama_fallback_model
+        if not fallback or fallback == model:
+            raise
+
+        logger.warning(
+            f"Primary model [{model}] unreachable, trying fallback [{fallback}]..."
+        )
+        try:
+            raw = await _generate(
+                settings.ollama_host, fallback, prompt,
+                format_json=True, temperature=temperature,
+                num_predict=num_predict, max_retries=2,
+            )
+            rec = AIRecommendation(raw, trigger_reason)
+            rec.reasoning = f"[fallback model] {rec.reasoning}"
+            logger.info(f"Fallback model [{fallback}] succeeded: {rec.recommended_amps}A")
+            return rec
+        except Exception as fallback_err:
+            logger.error(f"Fallback model [{fallback}] also failed: {fallback_err}")
+            raise primary_err from fallback_err
+
+
+def _clean_text_response(raw: str) -> str:
+    """Strip markdown fences and whitespace from raw Ollama text output."""
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1]
+    if raw.endswith("```"):
+        raw = raw.rsplit("```", 1)[0]
+    return raw.strip()
 
 
 async def call_ollama_text(
@@ -484,101 +536,224 @@ async def call_ollama_text(
     """Call Ollama API and return raw text response (no JSON format constraint).
 
     Used for free-form text generation like the charging outlook.
+    Tries primary model, then falls back to lighter model on failure.
     """
-    import asyncio
     import logging
     logger = logging.getLogger(__name__)
     settings = get_settings()
     model = model_override or settings.ollama_model
     num_predict = max_tokens_override or 200
 
-    last_error: Exception | None = None
-    for attempt in range(1, max_retries + 1):
+    # --- Try primary model ---
+    try:
+        raw = await _generate(
+            settings.ollama_host, model, prompt,
+            format_json=False, temperature=0.3,
+            num_predict=num_predict, max_retries=max_retries,
+        )
+        return _clean_text_response(raw.get("response", ""))
+    except Exception as primary_err:
+        fallback = settings.ollama_fallback_model
+        if not fallback or fallback == model:
+            raise
+
+        logger.warning(
+            f"Primary text model [{model}] failed, trying fallback [{fallback}]..."
+        )
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                resp = await client.post(
-                    f"{settings.ollama_host}/api/generate",
-                    json={
-                        "model": model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {
-                            "temperature": 0.3,
-                            "num_predict": num_predict,
-                        },
-                    },
-                )
-                resp.raise_for_status()
-                raw = resp.json().get("response", "").strip()
-                # Clean up any stray markdown fences
-                if raw.startswith("```"):
-                    raw = raw.split("\n", 1)[-1]
-                if raw.endswith("```"):
-                    raw = raw.rsplit("```", 1)[0]
-                return raw.strip()
-        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as e:
-            last_error = e
-            if attempt < max_retries:
-                wait = 5 * (2 ** (attempt - 1))
-                logger.warning(f"Ollama text attempt {attempt}/{max_retries} failed ({type(e).__name__}), retrying in {wait}s...")
-                await asyncio.sleep(wait)
-            else:
-                logger.error(f"Ollama text call failed after {max_retries} attempts: {e}")
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code >= 500 and attempt < max_retries:
-                wait = 5 * (2 ** (attempt - 1))
-                await asyncio.sleep(wait)
-                last_error = e
-            else:
-                raise
-
-    raise last_error or Exception("Ollama text call failed after all retries")
-
-
-async def warmup_model() -> None:
-    """Send a minimal prompt to force Ollama to load the model into memory.
-
-    Call this on backend startup so the first real inference doesn't hit
-    a cold-start timeout. Failures are logged but not raised.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    settings = get_settings()
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15)) as client:
-            logger.info(f"Warming up Ollama model: {settings.ollama_model}")
-            resp = await client.post(
-                f"{settings.ollama_host}/api/generate",
-                json={
-                    "model": settings.ollama_model,
-                    "prompt": "Reply OK",
-                    "stream": False,
-                    "options": {"num_predict": 5},
-                },
+            raw = await _generate(
+                settings.ollama_host, fallback, prompt,
+                format_json=False, temperature=0.3,
+                num_predict=num_predict, max_retries=2,
             )
-            resp.raise_for_status()
-            logger.info(f"Ollama model warm — ready for inference")
-    except Exception as e:
-        logger.warning(f"Ollama warmup failed ({type(e).__name__}): {e} — first call may be slow")
+            return _clean_text_response(raw.get("response", ""))
+        except Exception as fallback_err:
+            logger.error(f"Fallback text model [{fallback}] also failed: {fallback_err}")
+            raise primary_err from fallback_err
 
 
-async def test_ollama_connection() -> tuple[bool, str]:
-    """Test Ollama connectivity and model availability."""
+# ---------------------------------------------------------------------------
+# Health monitoring, warmup, and self-healing
+# ---------------------------------------------------------------------------
+
+# Shared state for the health monitor
+_ollama_healthy: bool = False
+_ollama_last_check: float = 0
+_ollama_consecutive_failures: int = 0
+
+
+def is_ollama_healthy() -> bool:
+    """Return the last-known health status (non-blocking)."""
+    return _ollama_healthy
+
+
+async def check_ollama_health() -> tuple[bool, str]:
+    """Quick connectivity check — GET /api/tags (lightweight, no inference)."""
+    global _ollama_healthy, _ollama_last_check, _ollama_consecutive_failures
     settings = get_settings()
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10, connect=5)) as client:
             resp = await client.get(f"{settings.ollama_host}/api/tags")
             resp.raise_for_status()
             models = resp.json().get("models", [])
             model_names = [m.get("name", "") for m in models]
+            _ollama_healthy = True
+            _ollama_last_check = time.time()
+            _ollama_consecutive_failures = 0
 
             if settings.ollama_model in model_names:
                 return True, f"Connected — {settings.ollama_model} available"
             elif any(settings.ollama_model.split(":")[0] in n for n in model_names):
                 return True, f"Connected — found similar model: {', '.join(model_names[:3])}"
             else:
-                return False, f"Connected but model '{settings.ollama_model}' not found. Available: {', '.join(model_names[:5])}"
-    except httpx.HTTPError as e:
-        return False, f"HTTP error: {str(e)}"
+                return True, f"Connected but model '{settings.ollama_model}' not found. Available: {', '.join(model_names[:5])}"
     except Exception as e:
-        return False, f"Unexpected error: {str(e)}"
+        _ollama_healthy = False
+        _ollama_last_check = time.time()
+        _ollama_consecutive_failures += 1
+        return False, f"{type(e).__name__}: {e}"
+
+
+async def _try_restart_ollama_container() -> bool:
+    """Attempt to restart the Ollama Docker container via the Docker socket.
+
+    Requires /var/run/docker.sock to be mounted into the backend container.
+    Returns True if restart command succeeded.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    settings = get_settings()
+    container = settings.ollama_container_name
+    if not container:
+        return False
+
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.AsyncHTTPTransport(uds="/var/run/docker.sock"),
+            timeout=30,
+        ) as client:
+            logger.warning(f"Attempting to restart Ollama container: {container}")
+            resp = await client.post(
+                f"http://localhost/containers/{container}/restart",
+                params={"t": 10},  # 10s grace period
+            )
+            if resp.status_code == 204:
+                logger.info(f"Ollama container '{container}' restart triggered successfully")
+                return True
+            else:
+                logger.error(f"Docker restart returned {resp.status_code}: {resp.text}")
+                return False
+    except Exception as e:
+        logger.warning(f"Cannot restart Ollama container ({type(e).__name__}): {e}")
+        return False
+
+
+async def _ensure_model_available(host: str, model: str) -> None:
+    """Pull a model if it's not already available. Non-blocking best-effort."""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10, connect=5)) as client:
+            resp = await client.get(f"{host}/api/tags")
+            resp.raise_for_status()
+            model_names = [m.get("name", "") for m in resp.json().get("models", [])]
+            if model in model_names:
+                return
+            # Model not found — pull it
+            logger.info(f"Pulling Ollama model: {model}")
+            async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=15)) as pull_client:
+                pull_resp = await pull_client.post(
+                    f"{host}/api/pull",
+                    json={"name": model, "stream": False},
+                )
+                pull_resp.raise_for_status()
+                logger.info(f"Model {model} pulled successfully")
+    except Exception as e:
+        logger.warning(f"Failed to ensure model {model}: {type(e).__name__}: {e}")
+
+
+async def warmup_model() -> None:
+    """Warm up Ollama on backend startup.
+
+    Retries every 30s for up to 5 minutes if Ollama is unreachable.
+    Also ensures the fallback model is available.
+    """
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+    settings = get_settings()
+
+    max_attempts = 10  # 10 × 30s = 5 minutes
+    for attempt in range(1, max_attempts + 1):
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15)) as client:
+                logger.info(f"Warming up Ollama model: {settings.ollama_model} (attempt {attempt})")
+                resp = await client.post(
+                    f"{settings.ollama_host}/api/generate",
+                    json={
+                        "model": settings.ollama_model,
+                        "prompt": "Reply OK",
+                        "stream": False,
+                        "options": {"num_predict": 5},
+                    },
+                )
+                resp.raise_for_status()
+                logger.info("Ollama model warm — ready for inference")
+                global _ollama_healthy
+                _ollama_healthy = True
+
+                # Also ensure fallback model is available
+                if settings.ollama_fallback_model and settings.ollama_fallback_model != settings.ollama_model:
+                    await _ensure_model_available(settings.ollama_host, settings.ollama_fallback_model)
+                return
+        except Exception as e:
+            logger.warning(
+                f"Ollama warmup attempt {attempt}/{max_attempts} failed "
+                f"({type(e).__name__}): {e}"
+            )
+            if attempt < max_attempts:
+                await asyncio.sleep(30)
+            else:
+                logger.error("Ollama warmup exhausted — AI features may be unavailable")
+
+
+async def ollama_health_monitor() -> None:
+    """Background task that periodically checks Ollama health.
+
+    Runs every 60s. If Ollama is down for 3+ consecutive checks,
+    attempts a container restart via Docker socket.
+    """
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+
+    while True:
+        await asyncio.sleep(60)
+        ok, detail = await check_ollama_health()
+        if ok:
+            continue
+
+        logger.warning(f"Ollama health check failed ({_ollama_consecutive_failures}x): {detail}")
+
+        # After 3 consecutive failures, try restarting the container
+        if _ollama_consecutive_failures >= 3 and _ollama_consecutive_failures % 3 == 0:
+            logger.error(
+                f"Ollama down for {_ollama_consecutive_failures} checks — "
+                f"attempting container restart..."
+            )
+            restarted = await _try_restart_ollama_container()
+            if restarted:
+                # Wait for container to come back up
+                await asyncio.sleep(30)
+                ok2, detail2 = await check_ollama_health()
+                if ok2:
+                    logger.info(f"Ollama recovered after restart: {detail2}")
+                    # Re-warm the model
+                    asyncio.create_task(warmup_model())
+                else:
+                    logger.error(f"Ollama still down after restart: {detail2}")
+
+
+async def test_ollama_connection() -> tuple[bool, str]:
+    """Test Ollama connectivity and model availability (used by /api/health)."""
+    return await check_ollama_health()

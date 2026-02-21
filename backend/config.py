@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Ollama
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
+    ollama_fallback_model: str = "qwen2.5:1.5b"
+    ollama_container_name: str = "ollama-zdkz-ollama-1"
 
     # Telegram
     telegram_bot_token: str = ""

@@ -243,6 +243,45 @@ async def update_ai_settings(
     return {"updated": updated}
 
 
+@router.get("/admin/ollama-status")
+async def ollama_status(
+    admin: dict = Depends(get_admin_user),
+):
+    """Get detailed Ollama health status."""
+    from services.ollama import check_ollama_health, is_ollama_healthy, _ollama_consecutive_failures, _ollama_last_check
+    ok, detail = await check_ollama_health()
+    return {
+        "healthy": ok,
+        "detail": detail,
+        "consecutive_failures": _ollama_consecutive_failures,
+        "last_check_secs_ago": round(time.time() - _ollama_last_check, 1) if _ollama_last_check > 0 else None,
+    }
+
+
+@router.post("/admin/ollama-restart")
+async def ollama_restart(
+    admin: dict = Depends(get_admin_user),
+):
+    """Manually trigger an Ollama container restart."""
+    from services.ollama import _try_restart_ollama_container, check_ollama_health, warmup_model
+    import asyncio
+
+    restarted = await _try_restart_ollama_container()
+    if not restarted:
+        raise HTTPException(status_code=502, detail="Failed to restart Ollama container — Docker socket may not be mounted")
+
+    # Wait for container to come back
+    await asyncio.sleep(15)
+    ok, detail = await check_ollama_health()
+    if ok:
+        asyncio.create_task(warmup_model())
+    return {
+        "restarted": True,
+        "healthy_after_restart": ok,
+        "detail": detail,
+    }
+
+
 @router.get("/admin/check")
 async def check_admin(
     admin: dict = Depends(get_admin_user),
