@@ -71,6 +71,8 @@ export function Dashboard() {
         solaxDataAgeSecs={status.solax_data_age_secs}
         tessieEnabled={tessieEnabled}
         onTessieToggle={handleTessieToggle}
+        ollamaHealthy={status.ollama_healthy}
+        autoOptimize={autoOptimize}
       />
       <ChargingOutlook />
       <AIRecommendationStrip

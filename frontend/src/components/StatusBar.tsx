@@ -1,6 +1,6 @@
 import React from 'react'
 import { Box, Typography, Chip, Switch } from '@mui/material'
-import { Car, Power } from 'lucide-react'
+import { Car, Power, Brain } from 'lucide-react'
 import type { ChargerStatus, ChargingState, Mode } from '../types/api'
 
 interface StatusBarProps {
@@ -12,6 +12,8 @@ interface StatusBarProps {
   solaxDataAgeSecs: number
   tessieEnabled: boolean
   onTessieToggle: (enabled: boolean) => void
+  ollamaHealthy: boolean
+  autoOptimize: boolean
 }
 
 function getStatusDisplay(props: StatusBarProps) {
@@ -38,6 +40,8 @@ export function StatusBar(props: StatusBarProps) {
   const { label, color, pulse } = getStatusDisplay(props)
   const tessieColor = props.tessieEnabled ? '#22c55e' : '#ef4444'
   const tessieLabel = props.tessieEnabled ? 'Tessie Connected' : 'Tessie Disconnected'
+  const aiColor = !props.autoOptimize ? '#4a6382' : props.ollamaHealthy ? '#22c55e' : '#ef4444'
+  const aiLabel = !props.autoOptimize ? 'AI Off' : props.ollamaHealthy ? 'AI Online' : 'AI Offline'
 
   return (
     <Box
@@ -51,6 +55,42 @@ export function StatusBar(props: StatusBarProps) {
         gap: 1.5,
       }}
     >
+      {/* AI Service Status */}
+      <Chip
+        icon={
+          <Brain
+            size={14}
+            color={aiColor}
+            style={{ marginLeft: 8 }}
+          />
+        }
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box
+              sx={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                bgcolor: aiColor,
+                boxShadow: props.ollamaHealthy && props.autoOptimize ? `0 0 8px ${aiColor}` : 'none',
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" fontWeight="600" sx={{ letterSpacing: 0.5 }}>
+              {aiLabel}
+            </Typography>
+          </Box>
+        }
+        sx={{
+          bgcolor: `${aiColor}1a`,
+          border: '1px solid',
+          borderColor: `${aiColor}4d`,
+          color: aiColor,
+          height: 32,
+          px: 1,
+        }}
+      />
+
       {/* Tessie Connection Kill Switch */}
       <Chip
         icon={

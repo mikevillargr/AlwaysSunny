@@ -85,6 +85,7 @@ export const SAMPLE_STATUS = {
   live_solar_pct: 72,
   daily_solar_pct: 65.42,
   currency_code: 'PHP',
+  ollama_healthy: true,
 }
 
 /**

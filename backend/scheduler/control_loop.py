@@ -26,7 +26,7 @@ from services.tessie import (
     TeslaLocation,
 )
 from services.weather import fetch_forecast, SolarForecast
-from services.ollama import call_ollama, build_prompt, AIRecommendation
+from services.ollama import call_ollama, build_prompt, AIRecommendation, is_ollama_healthy
 from services.session_tracker import SessionTracker
 from services.supabase_client import (
     get_user_settings,
@@ -791,6 +791,14 @@ async def _control_tick(user_id: str) -> None:
         logger.error(f"[{state.user_id[:8]}] Snapshot save failed: {e}")
 
 
+def _get_ollama_health() -> bool:
+    """Non-blocking check of last-known Ollama health status."""
+    try:
+        return is_ollama_healthy()
+    except Exception:
+        return False
+
+
 def build_status_response(state: UserLoopState) -> dict:
     """Build the /api/status response from in-memory state."""
     solax = state.solax
@@ -847,6 +855,7 @@ def build_status_response(state: UserLoopState) -> dict:
             max(0, min(100, ((state.daily_total_consumption_kwh - daily_grid_used) / state.daily_total_consumption_kwh) * 100)), 1
         ) if state.daily_total_consumption_kwh > 0 else 0,
         "currency_code": state.settings.get("currency_code", "PHP"),
+        "ollama_healthy": _get_ollama_health(),
     }
 
 

@@ -123,6 +123,8 @@ export interface StatusResponse {
   daily_solar_pct: number
   // Currency
   currency_code: string
+  // AI service health
+  ollama_healthy: boolean
 }
 
 // Session history types
