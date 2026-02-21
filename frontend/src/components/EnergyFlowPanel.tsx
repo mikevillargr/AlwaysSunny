@@ -272,7 +272,7 @@ export function EnergyFlowPanel({
               color: teslaColor,
             },
             {
-              label: 'SOLAR TO TESLA',
+              label: 'TESLA CHARGING SUBSIDIZED BY SOLAR',
               value: isCharging ? `${Math.round(liveTeslaSolarPct)}%` : '—',
               unit: isCharging ? `${fmtComma(solarToTeslaW)}W · today ${Math.round(dailyTeslaSolarPct)}%` : `today ${dailyTeslaSolarPct > 0 ? Math.round(dailyTeslaSolarPct) + '%' : '—'}`,
               color: isCharging ? (liveTeslaSolarPct >= 80 ? '#f5c518' : liveTeslaSolarPct >= 50 ? '#e2e8f0' : '#64748b') : '#64748b',

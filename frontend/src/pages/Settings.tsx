@@ -254,6 +254,27 @@ export function Settings() {
           if (data.location_name) {
             setLocationName(data.location_name)
             setAddressQuery(data.location_name)
+          } else if (data.home_lat && data.home_lon) {
+            // Reverse geocode to auto-populate location name for existing users
+            try {
+              const rgResp = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${data.home_lat}&lon=${data.home_lon}&format=json&zoom=16`,
+                { headers: { 'Accept-Language': 'en' } }
+              )
+              if (rgResp.ok) {
+                const rgData = await rgResp.json()
+                if (rgData.display_name) {
+                  const shortName = rgData.display_name.split(',').slice(0, 3).join(',').trim()
+                  setLocationName(shortName)
+                  setAddressQuery(shortName)
+                  // Persist to backend so it's available in /api/status
+                  apiFetch('/api/settings', {
+                    method: 'POST',
+                    body: JSON.stringify({ location_name: shortName }),
+                  }).catch(() => {})
+                }
+              }
+            } catch { /* ignore reverse geocode failures */ }
           }
           // Electricity tariff
           if (data.electricity_rate != null) {

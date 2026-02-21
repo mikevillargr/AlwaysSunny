@@ -64,6 +64,8 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
         electricity_rate_updated_at=merged.get("electricity_rate_updated_at") or None,
         home_lat=_parse_optional_float(merged.get("home_lat", "")),
         home_lon=_parse_optional_float(merged.get("home_lon", "")),
+        geofence_radius_m=int(merged.get("geofence_radius_m", 100)),
+        location_name=merged.get("location_name") or None,
         telegram_chat_id=merged.get("telegram_chat_id") or None,
         timezone=merged.get("timezone", "Asia/Manila"),
         notif_grid_budget=_parse_bool(merged.get("notif_grid_budget", "true")),
