@@ -125,6 +125,10 @@ export interface StatusResponse {
   currency_code: string
   // AI service health
   ollama_healthy: boolean
+  // Forecast location
+  forecast_location_set: boolean
+  forecast_location_lat: number | null
+  forecast_location_lon: number | null
 }
 
 // Session history types

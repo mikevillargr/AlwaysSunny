@@ -87,6 +87,10 @@ class StatusResponse(BaseModel):
     currency_code: str = "PHP"
     # AI service health
     ollama_healthy: bool = False
+    # Forecast location
+    forecast_location_set: bool = False
+    forecast_location_lat: Optional[float] = None
+    forecast_location_lon: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +126,7 @@ class SettingsUpdate(BaseModel):
     electricity_rate: Optional[float] = None
     home_lat: Optional[float] = None
     home_lon: Optional[float] = None
+    geofence_radius_m: Optional[int] = None
     telegram_chat_id: Optional[str] = None
     timezone: Optional[str] = None
     notif_grid_budget: Optional[bool] = None
@@ -146,6 +151,7 @@ class SettingsResponse(BaseModel):
     electricity_rate_updated_at: Optional[str] = None
     home_lat: Optional[float] = None
     home_lon: Optional[float] = None
+    geofence_radius_m: int = 100
     telegram_chat_id: Optional[str] = None
     timezone: str = "Asia/Manila"
     notif_grid_budget: bool = True

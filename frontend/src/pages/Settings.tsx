@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Box,
   Card,
@@ -19,6 +19,7 @@ import {
 } from '@mui/material'
 import { Check, Globe, Sun, Car, Bot, Send, MapPin, Zap } from 'lucide-react'
 import { apiFetch } from '../lib/api'
+import { LocationMap } from '../components/LocationMap'
 import { CURRENCIES } from '../utils/currency'
 export function Settings() {
   const [currency, setCurrency] = useState('PHP')
@@ -141,23 +142,21 @@ export function Settings() {
   const [geoLoading, setGeoLoading] = useState(false)
   const [geoError, setGeoError] = useState<string | null>(null)
 
-  // Address search (Nominatim)
+  // Address search (Nominatim) — debounced search-as-you-type
   const [addressQuery, setAddressQuery] = useState('')
   const [addressSearching, setAddressSearching] = useState(false)
   const [addressResults, setAddressResults] = useState<{ lat: string; lon: string; display_name: string }[]>([])
+  const [addressFocused, setAddressFocused] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Geofence radius
-  const [geofenceRadius, setGeofenceRadius] = useState(100)
-  const [savedGeofenceRadius, setSavedGeofenceRadius] = useState(100)
-
-  const locationDirty = homeLat !== savedLocation.lat || homeLon !== savedLocation.lon || geofenceRadius !== savedGeofenceRadius
-
-  const searchAddress = async () => {
-    if (!addressQuery.trim()) return
+  const searchAddress = async (query: string) => {
+    if (!query.trim() || query.trim().length < 3) {
+      setAddressResults([])
+      return
+    }
     setAddressSearching(true)
-    setAddressResults([])
     try {
-      const q = encodeURIComponent(addressQuery.trim())
+      const q = encodeURIComponent(query.trim())
       const resp = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&addressdetails=0`,
         { headers: { 'Accept-Language': 'en' } }
@@ -176,6 +175,18 @@ export function Settings() {
       setAddressSearching(false)
     }
   }
+
+  const handleAddressInput = (value: string) => {
+    setAddressQuery(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => searchAddress(value), 400)
+  }
+
+  // Geofence radius
+  const [geofenceRadius, setGeofenceRadius] = useState(100)
+  const [savedGeofenceRadius, setSavedGeofenceRadius] = useState(100)
+
+  const locationDirty = homeLat !== savedLocation.lat || homeLon !== savedLocation.lon || geofenceRadius !== savedGeofenceRadius
 
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
@@ -827,57 +838,55 @@ export function Settings() {
           </Typography>
         </Alert>
 
-        {/* Address Search */}
-        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
-          Search by address or place name
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'flex-start' }}>
+        {/* Address Search — search as you type */}
+        <Box sx={{ position: 'relative', mb: 2 }}>
           <TextField
             label="Search address, city, or place"
             value={addressQuery}
-            onChange={(e) => setAddressQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') searchAddress() }}
+            onChange={(e) => handleAddressInput(e.target.value)}
+            onFocus={() => setAddressFocused(true)}
+            onBlur={() => setTimeout(() => setAddressFocused(false), 200)}
             size="small"
             fullWidth
             placeholder="e.g. 123 Main St, Manila"
+            InputProps={{
+              endAdornment: addressSearching ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null,
+            }}
           />
-          <Button
-            variant="outlined"
-            onClick={searchAddress}
-            disabled={addressSearching || !addressQuery.trim()}
-            sx={{ flexShrink: 0, height: 40, minWidth: 80 }}
-          >
-            {addressSearching ? <CircularProgress size={16} /> : 'Search'}
-          </Button>
+          {addressFocused && addressResults.length > 0 && (
+            <Box sx={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+              maxHeight: 200, overflow: 'auto',
+              bgcolor: '#1e2d40', border: '1px solid #2a3f57', borderRadius: 1,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            }}>
+              {addressResults.map((r, i) => (
+                <Box
+                  key={i}
+                  onMouseDown={() => {
+                    setHomeLat(r.lat)
+                    setHomeLon(r.lon)
+                    setAddressResults([])
+                    setAddressQuery(r.display_name.split(',').slice(0, 3).join(','))
+                  }}
+                  sx={{
+                    px: 1.5, py: 1,
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: 'rgba(59,130,246,0.12)' },
+                    borderBottom: i < addressResults.length - 1 ? '1px solid #1a2a3d' : 'none',
+                  }}
+                >
+                  <Typography variant="caption" color="text.primary" sx={{ display: 'block' }}>
+                    {r.display_name}
+                  </Typography>
+                  <Typography variant="caption" color="text.disabled" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
+                    {r.lat}, {r.lon}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          )}
         </Box>
-        {addressResults.length > 0 && (
-          <Box sx={{ mb: 2, maxHeight: 160, overflow: 'auto', border: '1px solid #2a3f57', borderRadius: 1 }}>
-            {addressResults.map((r, i) => (
-              <Box
-                key={i}
-                onClick={() => {
-                  setHomeLat(r.lat)
-                  setHomeLon(r.lon)
-                  setAddressResults([])
-                  setAddressQuery(r.display_name.split(',').slice(0, 3).join(','))
-                }}
-                sx={{
-                  px: 1.5, py: 1,
-                  cursor: 'pointer',
-                  '&:hover': { bgcolor: 'rgba(59,130,246,0.08)' },
-                  borderBottom: i < addressResults.length - 1 ? '1px solid #1a2a3d' : 'none',
-                }}
-              >
-                <Typography variant="caption" color="text.primary" sx={{ display: 'block' }}>
-                  {r.display_name}
-                </Typography>
-                <Typography variant="caption" color="text.disabled" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                  {r.lat}, {r.lon}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        )}
 
         {/* Quick actions + coordinates */}
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, alignItems: 'flex-start' }}>
@@ -909,16 +918,24 @@ export function Settings() {
           />
         </Box>
 
-        {/* Map Preview */}
-        {homeLat && homeLon && (
-          <Box sx={{ mb: 2, borderRadius: 1, overflow: 'hidden', border: '1px solid #2a3f57', height: 180 }}>
-            <img
-              src={`https://staticmap.openstreetmap.de/staticmap.php?center=${homeLat},${homeLon}&zoom=15&size=600x180&markers=${homeLat},${homeLon},red-pushpin`}
-              alt="Map preview"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+        {/* Interactive Map with draggable pin + geofence radius */}
+        {homeLat && homeLon && !isNaN(parseFloat(homeLat)) && !isNaN(parseFloat(homeLon)) && (
+          <Box sx={{ mb: 2, borderRadius: 1, overflow: 'hidden', border: '1px solid #2a3f57', height: 280 }}>
+            <LocationMap
+              lat={parseFloat(homeLat)}
+              lon={parseFloat(homeLon)}
+              radiusM={geofenceRadius}
+              onPositionChange={(lat, lon) => {
+                setHomeLat(lat)
+                setHomeLon(lon)
+              }}
             />
           </Box>
+        )}
+        {homeLat && homeLon && (
+          <Typography variant="caption" color="text.disabled" display="block" sx={{ mb: 2, fontStyle: 'italic' }}>
+            Drag the pin to refine your exact location. The green circle shows your geofence radius.
+          </Typography>
         )}
 
         {/* Geofence Radius */}

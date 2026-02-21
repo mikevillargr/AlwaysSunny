@@ -135,11 +135,15 @@ export function Dashboard() {
           />
         </Grid>
         <Grid item xs={12} sm={4}>
-          <SolarForecastChart forecast={status.forecast} />
+          <SolarForecastChart
+            forecast={status.forecast}
+            forecastLocationSet={status.forecast_location_set}
+          />
         </Grid>
         <Grid item xs={12} sm={4}>
           <GridBudgetWeather
             forecast={status.forecast}
+            forecastLocationSet={status.forecast_location_set}
           />
         </Grid>
       </Grid>

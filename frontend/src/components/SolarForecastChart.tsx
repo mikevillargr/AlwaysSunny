@@ -15,9 +15,10 @@ import { formatHour12 } from '../utils/constants'
 
 interface SolarForecastChartProps {
   forecast: Forecast
+  forecastLocationSet?: boolean
 }
 
-export function SolarForecastChart({ forecast }: SolarForecastChartProps) {
+export function SolarForecastChart({ forecast, forecastLocationSet }: SolarForecastChartProps) {
   const data = forecast.hourly.map((h) => ({
     hour: formatHour12(h.hour),
     irradiance: h.irradiance_wm2,
@@ -36,17 +37,23 @@ export function SolarForecastChart({ forecast }: SolarForecastChartProps) {
       }}
       className="items-center justify-start"
     >
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-          mb: 2,
-        }}
-      >
-        Solar Forecast — Today
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+          }}
+        >
+          Solar Forecast — Today
+        </Typography>
+        {forecastLocationSet === false && (
+          <Typography variant="caption" sx={{ color: '#f59e0b', fontSize: '0.6rem' }}>
+            ⚠ No location set
+          </Typography>
+        )}
+      </Box>
 
       <Box
         sx={{

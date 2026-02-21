@@ -62,6 +62,9 @@ def get_sample_status(user_id: str) -> StatusResponse:
         daily_solar_pct=0,
         currency_code=settings.get("currency_code", "PHP"),
         ollama_healthy=is_ollama_healthy(),
+        forecast_location_set=bool(settings.get("home_lat") and settings.get("home_lon")),
+        forecast_location_lat=float(settings["home_lat"]) if settings.get("home_lat") else None,
+        forecast_location_lon=float(settings["home_lon"]) if settings.get("home_lon") else None,
     )
 
 

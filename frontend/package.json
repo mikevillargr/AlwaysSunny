@@ -13,9 +13,12 @@
     "@emotion/styled": "^11.11.5",
     "@mui/material": "^5.15.20",
     "@supabase/supabase-js": "^2.97.0",
+    "@types/leaflet": "^1.9.21",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.300.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1",
     "recharts": "^2.10.4"
   },
   "devDependencies": {

@@ -86,6 +86,9 @@ export const SAMPLE_STATUS = {
   daily_solar_pct: 65.42,
   currency_code: 'PHP',
   ollama_healthy: true,
+  forecast_location_set: true,
+  forecast_location_lat: 14.5995,
+  forecast_location_lon: 120.9842,
 }
 
 /**

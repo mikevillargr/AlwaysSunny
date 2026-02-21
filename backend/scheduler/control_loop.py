@@ -876,6 +876,9 @@ def build_status_response(state: UserLoopState) -> dict:
         ) if state.daily_total_consumption_kwh > 0 else 0,
         "currency_code": state.settings.get("currency_code", "PHP"),
         "ollama_healthy": _get_ollama_health(),
+        "forecast_location_set": bool(float(state.settings.get("home_lat", 0)) and float(state.settings.get("home_lon", 0))),
+        "forecast_location_lat": float(state.settings.get("home_lat", 0)) or None,
+        "forecast_location_lon": float(state.settings.get("home_lon", 0)) or None,
     }
 
 
