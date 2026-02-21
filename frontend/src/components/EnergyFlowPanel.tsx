@@ -11,6 +11,8 @@ interface EnergyFlowPanelProps {
   chargingState: string
   chargePortConnected: boolean
   tessieEnabled?: boolean
+  liveSolarPct?: number
+  dailySolarPct?: number
 }
 
 function fmt(w: number): string {
@@ -30,6 +32,8 @@ export function EnergyFlowPanel({
   chargingState,
   chargePortConnected,
   tessieEnabled = true,
+  liveSolarPct = 0,
+  dailySolarPct = 0,
 }: EnergyFlowPanelProps) {
   const teslaW = teslaChargingKw * 1000
   const isCharging = chargingState === 'Charging' && chargePortConnected
@@ -265,6 +269,12 @@ export function EnergyFlowPanel({
               unit: tessieEnabled ? 'W' : '',
               color: teslaColor,
             },
+            {
+              label: 'SOLAR SUBSIDY',
+              value: `${Math.round(liveSolarPct)}%`,
+              unit: `today ${Math.round(dailySolarPct)}%`,
+              color: liveSolarPct >= 80 ? '#f5c518' : liveSolarPct >= 50 ? '#e2e8f0' : '#64748b',
+            },
           ].map((stat, i) => (
             <Box
               key={i}
@@ -278,12 +288,16 @@ export function EnergyFlowPanel({
                   md: 0,
                 },
                 borderRight: {
-                  xs: i % 2 === 0 ? '1px solid #2a3f57' : 'none',
-                  md: i < 3 ? '1px solid #2a3f57' : 'none',
+                  xs: i % 2 === 0 && i < 4 ? '1px solid #2a3f57' : 'none',
+                  md: i < 4 ? '1px solid #2a3f57' : 'none',
                 },
                 borderBottom: {
-                  xs: i < 2 ? '1px solid #2a3f57' : 'none',
+                  xs: i < 4 ? '1px solid #2a3f57' : 'none',
                   md: 'none',
+                },
+                gridColumn: {
+                  xs: i === 4 ? '1 / -1' : undefined,
+                  md: undefined,
                 },
                 textAlign: 'center',
                 minWidth: {

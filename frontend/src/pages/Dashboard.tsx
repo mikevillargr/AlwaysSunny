@@ -112,6 +112,8 @@ export function Dashboard() {
             chargingState={status.charging_state}
             chargePortConnected={status.charge_port_connected}
             tessieEnabled={tessieEnabled}
+            liveSolarPct={status.live_solar_pct}
+            dailySolarPct={status.daily_solar_pct}
           />
         </Grid>
         <Grid item xs={12} sm={4}>

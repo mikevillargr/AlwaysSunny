@@ -118,6 +118,9 @@ export interface StatusResponse {
   grid_budget_total_kwh: number
   grid_budget_used_kwh: number
   grid_budget_pct: number
+  // Solar subsidy
+  live_solar_pct: number
+  daily_solar_pct: number
 }
 
 // Session history types

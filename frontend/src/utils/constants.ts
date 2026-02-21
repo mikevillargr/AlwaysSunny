@@ -81,7 +81,9 @@ export const SAMPLE_STATUS = {
   },
   grid_budget_total_kwh: 5.0,
   grid_budget_used_kwh: 2.1,
-  grid_budget_pct: 42,
+  grid_budget_pct: 0,
+  live_solar_pct: 72,
+  daily_solar_pct: 65.42,
 }
 
 /**

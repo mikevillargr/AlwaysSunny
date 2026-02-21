@@ -75,6 +75,7 @@ class UserLoopState:
     # Daily grid budget tracking
     daily_grid_start_kwh: float = 0.0  # consumeenergy snapshot at midnight
     daily_grid_date: str = ""  # YYYY-MM-DD of last reset
+    daily_total_consumption_kwh: float = 0.0  # running sum of household_demand_w × tick_interval
 
     # Charging outlook (AI-generated narrative, refreshed hourly)
     outlook_text: str = ""
@@ -420,16 +421,29 @@ async def _control_tick(user_id: str) -> None:
         if saved_date == today_str and saved_start:
             state.daily_grid_date = saved_date
             state.daily_grid_start_kwh = float(saved_start)
+            saved_consumption = state.settings.get("_daily_total_consumption_kwh", "0.0")
+            state.daily_total_consumption_kwh = float(saved_consumption) if saved_consumption else 0.0
             logger.info(f"[{state.user_id[:8]}] Restored daily grid snapshot from DB: {state.daily_grid_start_kwh:.2f} kWh")
 
     # New day (or first ever run) — take a fresh snapshot
     if state.daily_grid_date != today_str:
         state.daily_grid_start_kwh = solax.consume_energy_kwh
         state.daily_grid_date = today_str
+        state.daily_total_consumption_kwh = 0.0
         # Persist to DB
         upsert_user_setting(user_id, "_daily_grid_date", today_str)
         upsert_user_setting(user_id, "_daily_grid_start_kwh", str(solax.consume_energy_kwh))
+        upsert_user_setting(user_id, "_daily_total_consumption_kwh", "0.0")
         logger.info(f"[{state.user_id[:8]}] Daily grid reset: start={solax.consume_energy_kwh:.2f} kWh (persisted)")
+    else:
+        # Accumulate total consumption each tick (~60s interval)
+        # household_demand_w × (60s / 3600s) = kWh per tick
+        state.daily_total_consumption_kwh += solax.household_demand_w * (60.0 / 3600.0)
+        # Persist every ~5 min (every 5th tick) to avoid excessive DB writes
+        tick_count = getattr(state, '_consumption_persist_counter', 0) + 1
+        state._consumption_persist_counter = tick_count
+        if tick_count % 5 == 0:
+            upsert_user_setting(user_id, "_daily_total_consumption_kwh", str(round(state.daily_total_consumption_kwh, 3)))
 
     daily_grid_used = max(0, solax.consume_energy_kwh - state.daily_grid_start_kwh)
     grid_budget = float(state.settings.get("daily_grid_budget_kwh", 0))
@@ -787,6 +801,8 @@ def build_status_response(state: UserLoopState) -> dict:
 
     at_home, charger_status, detection_method = _check_home_detection(state)
 
+    daily_grid_used = max(0, (solax.consume_energy_kwh if solax else 0) - state.daily_grid_start_kwh) if state.daily_grid_date else 0
+
     return {
         "mode": state.mode,
         "charger_status": charger_status,
@@ -820,13 +836,16 @@ def build_status_response(state: UserLoopState) -> dict:
         "charging_strategy": state.settings.get("charging_strategy", "departure"),
         "departure_time": state.settings.get("departure_time", ""),
         "grid_budget_total_kwh": float(state.settings.get("daily_grid_budget_kwh", 0)),
-        "grid_budget_used_kwh": round(
-            max(0, (state.solax.consume_energy_kwh if state.solax else 0) - state.daily_grid_start_kwh), 1
-        ) if state.daily_grid_date else 0,
+        "grid_budget_used_kwh": round(daily_grid_used, 1),
         "grid_budget_pct": round(
-            (max(0, (state.solax.consume_energy_kwh if state.solax else 0) - state.daily_grid_start_kwh)
-             / float(state.settings.get("daily_grid_budget_kwh", 0))) * 100, 1
-        ) if state.daily_grid_date and float(state.settings.get("daily_grid_budget_kwh", 0)) > 0 else 0,
+            (daily_grid_used / float(state.settings.get("daily_grid_budget_kwh", 0))) * 100, 1
+        ) if float(state.settings.get("daily_grid_budget_kwh", 0)) > 0 else 0,
+        "live_solar_pct": round(
+            min(100, (solax.solar_w / solax.household_demand_w) * 100), 1
+        ) if solax and solax.household_demand_w > 0 else 0,
+        "daily_solar_pct": round(
+            max(0, min(100, ((state.daily_total_consumption_kwh - daily_grid_used) / state.daily_total_consumption_kwh) * 100)), 1
+        ) if state.daily_total_consumption_kwh > 0 else 0,
     }
 
 
