@@ -27,6 +27,7 @@ class ActiveSession:
     solar_pct: float = 0.0
     saved_amount: float = 0.0
     current_soc: int = 0
+    _last_tick_time: float = 0.0  # for accumulating solar kWh tick-by-tick
 
     @property
     def elapsed_mins(self) -> int:
@@ -39,6 +40,7 @@ class ActiveSession:
         current_consume_energy_kwh: float,
         current_soc: int,
         charge_energy_added: float = 0.0,
+        solar_to_tesla_w: float = 0.0,
     ) -> None:
         """Update session stats from latest Solax + Tesla data.
 
@@ -46,17 +48,27 @@ class ActiveSession:
             current_consume_energy_kwh: Solax cumulative grid import (consumeenergy)
             current_soc: Tesla battery_level %
             charge_energy_added: Tesla charge_energy_added (kWh added this charge session)
+            solar_to_tesla_w: Watts of solar currently going to Tesla (proportional)
         """
         self.current_soc = current_soc
+        now = time.time()
 
-        # Grid kWh used this session
+        # Grid kWh used this session (whole-house, kept for reference)
         self.grid_kwh = max(0, current_consume_energy_kwh - self.start_grid_kwh)
 
         # Total kWh added — use Tesla's own counter (much more accurate than SoC delta)
         self.kwh_added = charge_energy_added if charge_energy_added > 0 else 0.0
 
-        # Solar kWh = total added - grid used
-        self.solar_kwh = max(0, self.kwh_added - self.grid_kwh)
+        # Accumulate solar kWh tick-by-tick using proportional allocation
+        # solar_to_tesla_w × elapsed_hours since last tick
+        if self._last_tick_time > 0 and solar_to_tesla_w > 0:
+            elapsed_h = (now - self._last_tick_time) / 3600.0
+            self.solar_kwh += solar_to_tesla_w * elapsed_h / 1000.0
+        self._last_tick_time = now
+
+        # Cap solar_kwh to never exceed total kwh_added
+        if self.kwh_added > 0:
+            self.solar_kwh = min(self.solar_kwh, self.kwh_added)
 
         # Solar subsidy percentage
         if self.kwh_added > 0:
@@ -142,6 +154,7 @@ class SessionTracker:
         electricity_rate: float,
         charge_energy_added: float = 0.0,
         subsidy_calculation_method: str = "estimated",
+        solar_to_tesla_w: float = 0.0,
     ) -> tuple[str | None, dict | None]:
         """Called every control loop tick. Returns (event, data).
 
@@ -181,7 +194,7 @@ class SessionTracker:
             if should_end:
                 # Final update before ending — use latest rate
                 self.active.electricity_rate = electricity_rate
-                self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
+                self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added, solar_to_tesla_w)
                 final_data = self.active.to_db_final()
                 db_id = self.active.db_session_id
                 self.active = None
@@ -190,7 +203,7 @@ class SessionTracker:
 
             # Session still active — update stats and keep rate current
             self.active.electricity_rate = electricity_rate
-            self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added)
+            self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added, solar_to_tesla_w)
             self._prev_plugged_in = plugged_in
             return "updated", self.active.to_api_dict()
 

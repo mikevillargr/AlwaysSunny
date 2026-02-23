@@ -767,6 +767,9 @@ async def _control_tick(user_id: str) -> None:
         else:
             state.session_tracker._recovered = True  # No DB session to recover
 
+    # Compute live solar-to-Tesla watts for session tracking (proportional allocation)
+    _solar_to_tesla_w = _calc_solar_to_tesla_w(state)
+
     event, data = state.session_tracker.tick(
         user_id=user_id,
         plugged_in=tesla.charge_port_connected,
@@ -778,6 +781,7 @@ async def _control_tick(user_id: str) -> None:
         electricity_rate=electricity_rate,
         charge_energy_added=tesla.charge_energy_added,
         subsidy_calculation_method="exact" if state.settings.get("has_home_battery", "false").lower() != "true" else "estimated",
+        solar_to_tesla_w=_solar_to_tesla_w,
     )
 
     if event == "started" and data:
