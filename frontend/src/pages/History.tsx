@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import {
   Box,
   Card,
+  Chip,
   Typography,
   Grid,
   Tabs,
@@ -62,6 +63,11 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
   const saved = session.saved_amount ?? 0
   const isActive = !session.ended_at
 
+  // Detect phantom: no ended_at but started > 12h ago (shouldn't happen after backend cleanup, but defensive)
+  const startedDate = new Date(session.started_at)
+  const hoursAgo = (Date.now() - startedDate.getTime()) / (1000 * 60 * 60)
+  const isPhantom = isActive && hoursAgo > 12
+
   const handleToggle = () => {
     const willExpand = !expanded
     setExpanded(willExpand)
@@ -78,7 +84,15 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
 
   return (
     <Card
-      sx={{ mb: 2, p: 2, cursor: 'pointer' }}
+      sx={{
+        mb: 2,
+        p: 2,
+        cursor: 'pointer',
+        ...(isActive && !isPhantom && {
+          border: '1px solid #22c55e40',
+          boxShadow: '0 0 12px #22c55e15',
+        }),
+      }}
       onClick={handleToggle}
     >
       <Box
@@ -90,14 +104,40 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
         }}
       >
         <Box>
-          <Typography variant="subtitle1" fontWeight="600" color="text.primary">
-            {formatDate(session.started_at)}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle1" fontWeight="600" color="text.primary">
+              {formatDate(session.started_at)}
+            </Typography>
+            {isActive && !isPhantom && (
+              <Chip
+                label="LIVE"
+                size="small"
+                sx={{
+                  bgcolor: '#22c55e',
+                  color: '#000',
+                  fontWeight: 700,
+                  fontSize: '0.65rem',
+                  height: 20,
+                  animation: 'pulse 2s ease-in-out infinite',
+                  '@keyframes pulse': {
+                    '0%, 100%': { opacity: 1 },
+                    '50%': { opacity: 0.6 },
+                  },
+                }}
+              />
+            )}
+          </Box>
           <Typography variant="body2" color="text.secondary">
             {formatTime(session.started_at)}
-            {isActive ? ' → In progress' : ` → ${formatTime(session.ended_at)}`}
+            {isActive && !isPhantom
+              ? ' → In progress'
+              : isPhantom
+                ? ' → Incomplete'
+                : ` → ${formatTime(session.ended_at)}`}
             {' · '}
-            {formatDuration(session.duration_mins)}
+            {isActive && !isPhantom
+              ? formatDuration(Math.round((Date.now() - startedDate.getTime()) / 60000))
+              : formatDuration(session.duration_mins)}
           </Typography>
         </Box>
         <Box sx={{ textAlign: 'right' }}>
@@ -152,7 +192,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
                 SoC Range
               </Typography>
               <Typography variant="body2" fontWeight="600" color="text.primary">
-                {session.start_soc ?? '—'}% → {session.end_soc ?? (isActive ? 'charging' : '—')}%
+                {session.start_soc ?? '—'}% → {session.end_soc ?? (isActive && !isPhantom ? 'charging' : '—')}%
                 {session.target_soc ? ` (target ${session.target_soc}%)` : ''}
               </Typography>
             </Grid>
