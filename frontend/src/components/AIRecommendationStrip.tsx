@@ -28,7 +28,8 @@ export function AIRecommendationStrip({
   const aiToggleEnabled = tessieEnabled && chargePortConnected
   const isError = aiStatus.startsWith('error:')
   const isFallback = aiStatus === 'fallback' || isError
-  const isWaiting = autoOptimize && !aiReasoning && !isError
+  const isPending = aiStatus === 'pending'
+  const isWaiting = autoOptimize && (!aiReasoning || isPending) && !isError
 
   // Determine lockout reason
   const lockoutReason = !tessieEnabled

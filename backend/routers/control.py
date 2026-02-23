@@ -61,41 +61,38 @@ async def toggle_optimization(
     if state:
         state.ai_enabled = body.enabled
         if body.enabled:
-            # Trigger immediate AI call — don't wait for the 60s control loop tick
+            # Fire immediate AI call in background — don't block the HTTP response
+            # Ollama can take 30-180s on cold start; blocking would make the toggle feel stuck
             state.last_ai_call = 0
-            state.ai_status = "active"
-            logger.info(f"[{user_id[:8]}] AI ON → calling Ollama immediately")
-            try:
-                await _maybe_call_ai(state, "toggle_on")
-                if state.ai_recommendation and state.ai_recommendation.recommended_amps >= 0:
-                    rec_amps = state.ai_recommendation.recommended_amps
-                    # Send the AI recommendation to Tessie immediately
-                    creds = get_user_credentials(user_id) or {}
-                    api_key = creds.get("tessie_api_key")
-                    vin = creds.get("tessie_vin")
-                    if api_key and vin and tessie_enabled:
-                        try:
-                            if rec_amps >= 5:
-                                await set_charging_amps(api_key, vin, rec_amps)
-                                state.last_amps_sent = rec_amps
-                                logger.info(f"[{user_id[:8]}] AI ON → set {rec_amps}A immediately")
-                            elif rec_amps == 0:
-                                await stop_charging(api_key, vin)
-                                state.last_amps_sent = 0
-                                logger.info(f"[{user_id[:8]}] AI ON → stop charging (AI recommended 0A)")
-                        except Exception as e:
-                            logger.error(f"[{user_id[:8]}] AI toggle Tessie command failed: {e}")
-                    return {
-                        "ai_enabled": body.enabled,
-                        "ai_recommendation": {
-                            "recommended_amps": rec_amps,
-                            "reasoning": state.ai_recommendation.reasoning,
-                            "confidence": state.ai_recommendation.confidence,
-                        },
-                    }
-            except Exception as e:
-                logger.warning(f"[{user_id[:8]}] AI ON → immediate call failed: {e}")
-                state.ai_status = f"error: {e}"
+            state.ai_status = "pending"
+            logger.info(f"[{user_id[:8]}] AI ON → firing background Ollama call")
+
+            async def _bg_ai_call():
+                try:
+                    await _maybe_call_ai(state, "toggle_on")
+                    if state.ai_recommendation and state.ai_recommendation.recommended_amps >= 0:
+                        rec_amps = state.ai_recommendation.recommended_amps
+                        creds = get_user_credentials(user_id) or {}
+                        api_key = creds.get("tessie_api_key")
+                        vin = creds.get("tessie_vin")
+                        if api_key and vin and tessie_enabled:
+                            try:
+                                if rec_amps >= 5:
+                                    await set_charging_amps(api_key, vin, rec_amps)
+                                    state.last_amps_sent = rec_amps
+                                    logger.info(f"[{user_id[:8]}] AI ON → set {rec_amps}A")
+                                elif rec_amps == 0:
+                                    await stop_charging(api_key, vin)
+                                    state.last_amps_sent = 0
+                                    logger.info(f"[{user_id[:8]}] AI ON → stop charging (AI: 0A)")
+                            except Exception as e:
+                                logger.error(f"[{user_id[:8]}] AI toggle Tessie cmd failed: {e}")
+                except Exception as e:
+                    logger.warning(f"[{user_id[:8]}] AI ON → background call failed: {e}")
+                    state.ai_status = f"error: {e}"
+
+            import asyncio
+            asyncio.create_task(_bg_ai_call())
 
     return {"ai_enabled": body.enabled}
 

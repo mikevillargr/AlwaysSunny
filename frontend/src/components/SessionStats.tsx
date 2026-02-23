@@ -40,9 +40,9 @@ export function SessionStats({
   solarToTeslaW = 0,
   loading = false,
 }: SessionStatsProps) {
-  // Use session accumulated solar_pct if available, otherwise use live proportional value
-  const sessionSolarPct = session?.solar_pct ?? 0
-  const solarPct = sessionSolarPct > 0 ? sessionSolarPct : liveTeslaSolarPct
+  // Always use live proportional value as source of truth for solar subsidy
+  // Session accumulated value can be stale (0) for sessions started before the fix
+  const solarPct = liveTeslaSolarPct
   const gridPct = 100 - solarPct
   const safeTeslaSoc = teslaSoc || 0
   const safeTargetSoc = targetSoc || 100
@@ -51,7 +51,7 @@ export function SessionStats({
   const dimmed = !tessieEnabled
   const isCharging = chargePortConnected && session != null
 
-  if (loading || (!isCharging && !session)) {
+  if (!isCharging && !session) {
     return (
       <Card
         sx={{

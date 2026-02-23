@@ -9,6 +9,7 @@ interface AmperageControlProps {
   teslaChargingKw: number
   tessieEnabled?: boolean
   chargePortConnected?: boolean
+  aiRecommendedAmps?: number
 }
 
 export function AmperageControl({
@@ -17,16 +18,22 @@ export function AmperageControl({
   teslaChargingKw,
   tessieEnabled = true,
   chargePortConnected = false,
+  aiRecommendedAmps = 0,
 }: AmperageControlProps) {
   const controlsEnabled = tessieEnabled && chargePortConnected
   const disabled = !controlsEnabled || autoOptimize
   const [localAmps, setLocalAmps] = useState<number>(teslaChargingAmps)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Sync from live data when not dragging
+  // When AI is controlling, show the AI-recommended amps (command sent to Tessie)
+  // When manual, show Tesla's actual current
   useEffect(() => {
-    setLocalAmps(teslaChargingAmps)
-  }, [teslaChargingAmps])
+    if (autoOptimize && aiRecommendedAmps > 0) {
+      setLocalAmps(aiRecommendedAmps)
+    } else {
+      setLocalAmps(teslaChargingAmps)
+    }
+  }, [teslaChargingAmps, autoOptimize, aiRecommendedAmps])
 
   const handleSliderChange = (_: unknown, val: number | number[]) => {
     setLocalAmps(val as number)

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Grid, Box } from '@mui/material'
 import { StatusBar } from '../components/StatusBar'
 import { EnergyFlowPanel } from '../components/EnergyFlowPanel'
@@ -25,6 +25,8 @@ export function Dashboard() {
     setTessieEnabled(status.tessie_enabled)
   }, [status.tessie_enabled])
 
+  const aiPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const handleAutoOptimizeChange = useCallback(async (value: boolean) => {
     setAutoOptimize(value)
     try {
@@ -32,8 +34,20 @@ export function Dashboard() {
         method: 'POST',
         body: JSON.stringify({ enabled: value }),
       })
-      // Refresh status immediately to pick up new AI recommendation
+      // Refresh immediately, then poll rapidly for 60s to catch the background AI result
       refresh()
+      if (value) {
+        if (aiPollRef.current) clearInterval(aiPollRef.current)
+        let polls = 0
+        aiPollRef.current = setInterval(() => {
+          polls++
+          refresh()
+          if (polls >= 12) { // 12 × 5s = 60s
+            if (aiPollRef.current) clearInterval(aiPollRef.current)
+            aiPollRef.current = null
+          }
+        }, 5000)
+      }
     } catch (e) {
       console.warn('[Dashboard] Failed to toggle AI:', e)
       setAutoOptimize(!value)
@@ -94,6 +108,7 @@ export function Dashboard() {
         teslaChargingKw={status.tesla_charging_kw}
         tessieEnabled={tessieEnabled}
         chargePortConnected={status.charge_port_connected}
+        aiRecommendedAmps={status.ai_recommended_amps}
       />
       <ChargingControls
         teslaSoc={status.tesla_soc}
