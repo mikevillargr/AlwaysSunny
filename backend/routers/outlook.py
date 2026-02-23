@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 import logging
 from datetime import datetime
@@ -127,7 +128,7 @@ async def generate_outlook(state) -> tuple[str, str]:
         ai_model = state.settings.get("ai_model") or None
         raw_text = await call_ollama_text(
             prompt,
-            max_retries=3,
+            max_retries=1,  # Don't retry — outlook is informational, not critical
             model_override=ai_model,
             max_tokens_override=200,
         )
@@ -197,15 +198,28 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
             "error": True,
         }
 
-    # Generate new outlook
-    text, generated_at = await generate_outlook(state)
-    state.outlook_text = text
-    state.outlook_generated_at = generated_at
+    # Fire generation in background — don't block the HTTP response
+    # Ollama can take 30-180s; blocking makes the outlook card appear stuck
     state.last_outlook_fetch = now
 
+    async def _bg_generate():
+        text, generated_at = await generate_outlook(state)
+        state.outlook_text = text
+        state.outlook_generated_at = generated_at
+
+    asyncio.create_task(_bg_generate())
+
+    # Return existing cached text if available, otherwise pending
+    if state.outlook_text and state.outlook_generated_at:
+        return {
+            "text": state.outlook_text,
+            "generated_at": state.outlook_generated_at,
+            "cached": True,
+            "pending": True,  # Signal that a refresh is in progress
+        }
     return {
-        "text": text,
-        "generated_at": generated_at,
+        "text": "",
+        "generated_at": "",
         "cached": False,
-        "error": not generated_at,
+        "pending": True,
     }

@@ -5,6 +5,7 @@ These endpoints send Tessie commands IMMEDIATELY for minimal latency.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -91,7 +92,6 @@ async def toggle_optimization(
                     logger.warning(f"[{user_id[:8]}] AI ON → background call failed: {e}")
                     state.ai_status = f"error: {e}"
 
-            import asyncio
             asyncio.create_task(_bg_ai_call())
 
     return {"ai_enabled": body.enabled}

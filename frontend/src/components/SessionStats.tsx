@@ -40,9 +40,11 @@ export function SessionStats({
   solarToTeslaW = 0,
   loading = false,
 }: SessionStatsProps) {
-  // Always use live proportional value as source of truth for solar subsidy
-  // Session accumulated value can be stale (0) for sessions started before the fix
-  const solarPct = liveTeslaSolarPct
+  // Session solar_pct = cumulative average over entire session (solar_kwh / kwh_added)
+  // liveTeslaSolarPct = real-time instantaneous value
+  // Use session accumulated value; fall back to live only if session hasn't accumulated yet
+  const sessionSolarPct = session?.solar_pct ?? 0
+  const solarPct = sessionSolarPct > 0 ? sessionSolarPct : liveTeslaSolarPct
   const gridPct = 100 - solarPct
   const safeTeslaSoc = teslaSoc || 0
   const safeTargetSoc = targetSoc || 100
@@ -224,7 +226,7 @@ export function SessionStats({
             mb: 0.5,
           }}
         >
-          Tesla Solar Subsidy
+          Solar Subsidy (Session Avg)
         </Typography>
         <Box
           sx={{
@@ -240,6 +242,11 @@ export function SessionStats({
             · {(session?.solar_kwh ?? 0).toFixed(1)} kWh from solar
           </Typography>
         </Box>
+        {liveTeslaSolarPct > 0 && Math.round(liveTeslaSolarPct) !== Math.round(solarPct) && (
+          <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block' }}>
+            Live: {Math.round(liveTeslaSolarPct)}%
+          </Typography>
+        )}
       </Box>
 
       {/* On Track Status */}
