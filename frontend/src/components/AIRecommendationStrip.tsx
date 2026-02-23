@@ -117,7 +117,7 @@ export function AIRecommendationStrip({
               mt: 0.5,
             }}
           >
-            {(loading || isWaiting) && autoOptimize ? (
+            {(loading || isWaiting) && autoOptimize && aiToggleEnabled ? (
               <CircularProgress size={16} sx={{ color: '#a855f7' }} />
             ) : (
               <Typography

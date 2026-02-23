@@ -12,7 +12,7 @@ interface OutlookData {
   error?: boolean
 }
 
-const POLL_INTERVAL = 60 * 60 * 1000 // 1 hour
+const POLL_INTERVAL = 30 * 60 * 1000 // 30 minutes
 const ERROR_RETRY_INTERVAL = 30 * 1000 // 30s retry when AI is down
 
 /** Strip any JSON/bracket artifacts from the outlook text */
@@ -182,7 +182,7 @@ export function ChargingOutlook() {
             sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5 }}
           >
             <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem' }}>
-              AI-generated · Updates hourly · Does not control charging
+              AI-generated · Updates every 30 min · Does not control charging
             </Typography>
             <Box
               component="span"

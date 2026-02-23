@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-OUTLOOK_CACHE_SECS = 3600  # Refresh at most once per hour
+OUTLOOK_CACHE_SECS = 1800  # Refresh at most once per 30 minutes
 OUTLOOK_ERROR_RETRY_SECS = 120  # Retry after 2 min on failure (not 1 hour)
 
 
@@ -153,7 +153,16 @@ async def generate_outlook(state) -> tuple[str, str]:
         # Remove any remaining brackets/braces
         raw_text = raw_text.strip().strip("{}[]").strip()
 
-        generated_at = datetime.now().strftime("%H:%M")
+        # Use user's timezone for the generated_at timestamp
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        user_tz = state.settings.get("timezone", "Asia/Manila")
+        try:
+            generated_at = datetime.now(ZoneInfo(user_tz)).strftime("%H:%M")
+        except Exception:
+            generated_at = datetime.now().strftime("%H:%M")
         return raw_text, generated_at
     except Exception as e:
         logger.warning(f"Outlook generation failed: {e}")
