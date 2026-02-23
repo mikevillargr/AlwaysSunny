@@ -618,13 +618,15 @@ async def _control_tick(user_id: str) -> None:
         elif charging_strategy == "solar":
             # === SOLAR-FIRST STRATEGY ===
             # Only charge from solar surplus. Pause when no surplus.
+            # Home demand = household minus Tesla (Solax includes Tesla in household)
+            home_demand_w = max(0, solax.household_demand_w - (tesla.charging_kw * 1000))
             estimated_w, _, _ = _estimate_available_w(state)
             if estimated_w > 0:
                 # No-battery setup: use forecast-based estimate as true available
-                solar_surplus_w = estimated_w - solax.household_demand_w
+                solar_surplus_w = estimated_w - home_demand_w
             else:
                 # Battery setup or unknown panels: use measured surplus
-                solar_surplus_w = solax.solar_w - solax.household_demand_w
+                solar_surplus_w = solax.solar_w - home_demand_w
             state.solar_buffer.append(solar_surplus_w)
             smoothed = state.smoothed_available_w
             target_amps = int(smoothed / circuit_voltage)
@@ -680,13 +682,15 @@ async def _control_tick(user_id: str) -> None:
                     pass
 
             # Start with solar surplus calculation
+            # Home demand = household minus Tesla (Solax includes Tesla in household)
+            home_demand_w = max(0, solax.household_demand_w - (tesla.charging_kw * 1000))
             estimated_w, _, _ = _estimate_available_w(state)
             if estimated_w > 0:
                 # No-battery setup: use forecast-based estimate as true available
-                solar_surplus_w = estimated_w - solax.household_demand_w
+                solar_surplus_w = estimated_w - home_demand_w
             else:
                 # Battery setup or unknown panels: use measured surplus
-                solar_surplus_w = solax.solar_w - solax.household_demand_w
+                solar_surplus_w = solax.solar_w - home_demand_w
             grid_allowance_w = grid_import_limit_w if grid_budget_remaining > 0 else 0
             available_w = solar_surplus_w + grid_allowance_w
             state.solar_buffer.append(available_w)

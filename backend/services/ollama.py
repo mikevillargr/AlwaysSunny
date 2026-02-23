@@ -204,7 +204,10 @@ def build_prompt(
         effective_available_w = estimated_available_w
     else:
         effective_available_w = solar_w
-    solar_surplus_w = max(0, effective_available_w - household_w)
+    # Surplus = solar available minus home demand (excl. Tesla, since Tesla IS the load we're powering)
+    # household_w from Solax includes Tesla charging, so subtract current_amps * 240 to get home-only
+    home_only_w = max(0, household_w - current_amps * 240)
+    solar_surplus_w = max(0, effective_available_w - home_only_w)
     max_solar_amps = min(32, int(solar_surplus_w / 240))
     kwh_per_amp_hour = 0.24  # 240V × 1A = 240W = 0.24 kWh/h
 

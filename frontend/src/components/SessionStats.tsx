@@ -18,6 +18,9 @@ interface SessionStatsProps {
   chargePortConnected?: boolean
   minutesToFullCharge?: number
   currencyCode?: string
+  liveTeslaSolarPct?: number
+  solarToTeslaW?: number
+  loading?: boolean
 }
 
 export function SessionStats({
@@ -33,8 +36,13 @@ export function SessionStats({
   chargePortConnected = false,
   minutesToFullCharge = 0,
   currencyCode = 'PHP',
+  liveTeslaSolarPct = 0,
+  solarToTeslaW = 0,
+  loading = false,
 }: SessionStatsProps) {
-  const solarPct = session?.solar_pct ?? 0
+  // Use session accumulated solar_pct if available, otherwise use live proportional value
+  const sessionSolarPct = session?.solar_pct ?? 0
+  const solarPct = sessionSolarPct > 0 ? sessionSolarPct : liveTeslaSolarPct
   const gridPct = 100 - solarPct
   const safeTeslaSoc = teslaSoc || 0
   const safeTargetSoc = targetSoc || 100
@@ -43,7 +51,7 @@ export function SessionStats({
   const dimmed = !tessieEnabled
   const isCharging = chargePortConnected && session != null
 
-  if (!isCharging) {
+  if (loading || (!isCharging && !session)) {
     return (
       <Card
         sx={{

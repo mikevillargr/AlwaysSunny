@@ -13,7 +13,7 @@ import { useStatus } from '../hooks/useStatus'
 import { apiFetch } from '../lib/api'
 
 export function Dashboard() {
-  const { status } = useStatus()
+  const { status, loading } = useStatus()
   const [autoOptimize, setAutoOptimize] = useState(status.ai_enabled)
   const [tessieEnabled, setTessieEnabled] = useState(status.tessie_enabled)
 
@@ -133,6 +133,9 @@ export function Dashboard() {
             chargePortConnected={status.charge_port_connected}
             minutesToFullCharge={status.minutes_to_full_charge}
             currencyCode={status.currency_code}
+            liveTeslaSolarPct={status.live_tesla_solar_pct}
+            solarToTeslaW={status.solar_to_tesla_w}
+            loading={loading}
           />
         </Grid>
         <Grid item xs={12} sm={4}>

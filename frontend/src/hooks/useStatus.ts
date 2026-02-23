@@ -12,7 +12,7 @@ interface UseStatusReturn {
 
 export function useStatus(): UseStatusReturn {
   const [status, setStatus] = useState<StatusResponse>(SAMPLE_STATUS as StatusResponse)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchStatus = useCallback(async () => {
