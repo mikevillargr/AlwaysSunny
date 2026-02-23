@@ -139,6 +139,7 @@ class SessionTracker:
             target_soc=db_session.get("target_soc", 80),
             start_grid_kwh=start_grid_kwh,
             electricity_rate=electricity_rate,
+            _last_tick_time=time.time(),
         )
         self._prev_plugged_in = True
 
@@ -163,14 +164,16 @@ class SessionTracker:
         """
         # Detect session start: transition from unplugged to plugged at home
         if plugged_in and at_home and not self._prev_plugged_in:
+            now = time.time()
             self.active = ActiveSession(
                 user_id=user_id,
-                start_time=time.time(),
+                start_time=now,
                 start_soc=tesla_soc,
                 target_soc=target_soc,
                 start_grid_kwh=consume_energy_kwh,
                 electricity_rate=electricity_rate,
                 subsidy_calculation_method=subsidy_calculation_method,
+                _last_tick_time=now,
             )
             self._prev_plugged_in = True
             return "started", {

@@ -96,8 +96,10 @@ def _build_actual_conditions(
     efficiency_coeff: float,
     solar_to_tesla_w: float = 0.0,
     live_tesla_solar_pct: float = 0.0,
+    tesla_charging_w: float = 0.0,
 ) -> str:
     """Build the ACTUAL CONDITIONS block, conditional on inverter setup."""
+    home_demand_w = max(0, household_w - tesla_charging_w)
     tesla_solar_line = f"\nSolar going to Tesla now: {solar_to_tesla_w:.0f}W ({live_tesla_solar_pct:.0f}%)"
     if not has_home_battery and panel_capacity_w > 0 and estimated_available_w > 0:
         return f"""Solar yield (actual measured): {solar_w:.0f}W
@@ -114,12 +116,12 @@ Estimated panel capacity available now: {estimated_available_w:.0f}W
   ↑ Use solar_trend to assess short-term confidence in the estimate:
     if trend is "falling", weight estimate conservatively;
     if "rising" or "stable", trust the estimate fully.
-Household demand: {household_w:.0f}W
+Home demand (excl. Tesla): {home_demand_w:.0f}W  |  Total load (incl. Tesla): {household_w:.0f}W
 Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
 Solar surplus (estimated available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw{tesla_solar_line}"""
     else:
         return f"""Solar yield: {solar_w:.0f}W  |  Trend (last 5 min): {solar_trend}
-Household demand: {household_w:.0f}W
+Home demand (excl. Tesla): {home_demand_w:.0f}W  |  Total load (incl. Tesla): {household_w:.0f}W
 Solar surplus (available for car): {solar_surplus_w:.0f}W → max {max_solar_amps}A without grid draw
 Grid import: {grid_import_w:.0f}W  (+ = importing, - = exporting)
 Home battery SoC: {battery_soc}%  |  Battery power: {battery_w:.0f}W{tesla_solar_line}"""
@@ -334,7 +336,7 @@ Net metering enabled: {has_net_metering}
 Installed panel capacity: {panel_capacity_w}W (0 = unknown)
 
 === ACTUAL CONDITIONS (Solax — ground truth) ===
-{_build_actual_conditions(solar_w, solar_trend, household_w, grid_import_w, battery_soc, battery_w, solar_surplus_w, max_solar_amps, has_home_battery, panel_capacity_w, estimated_available_w, forecasted_irradiance_wm2, efficiency_coeff, solar_to_tesla_w, live_tesla_solar_pct)}
+{_build_actual_conditions(solar_w, solar_trend, household_w, grid_import_w, battery_soc, battery_w, solar_surplus_w, max_solar_amps, has_home_battery, panel_capacity_w, estimated_available_w, forecasted_irradiance_wm2, efficiency_coeff, solar_to_tesla_w, live_tesla_solar_pct, tesla_charging_w=current_amps * 240)}
 
 === SOLAR FORECAST (Open-Meteo) ===
 {irradiance_curve}

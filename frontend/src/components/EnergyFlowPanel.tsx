@@ -154,7 +154,7 @@ export function EnergyFlowPanel({
                 </div>
               </foreignObject>
               <text x="0" y="-48" textAnchor="middle" fill="#8da4be" fontSize="10" letterSpacing="1">HOME</text>
-              <text x="0" y="54" textAnchor="middle" fill="#14b8a6" fontSize="13" fontWeight="bold">{fmtComma(householdDemandW)}W</text>
+              <text x="0" y="54" textAnchor="middle" fill="#14b8a6" fontSize="13" fontWeight="bold">{fmtComma(Math.max(0, householdDemandW - teslaW))}W</text>
             </g>
 
             {/* === RIGHT: Tesla === */}
@@ -255,7 +255,7 @@ export function EnergyFlowPanel({
             },
             {
               label: 'HOME DEMAND',
-              value: fmtComma(householdDemandW),
+              value: fmtComma(Math.max(0, householdDemandW - teslaW)),
               unit: 'W',
               color: '#14b8a6',
             },

@@ -45,7 +45,10 @@ def _build_outlook_prompt(state) -> str:
     solar_w = solax.solar_w
     household_w = solax.household_demand_w
     grid_import_w = solax.grid_import_w
-    surplus_w = max(0, solar_w - household_w)
+    tesla_w = (tesla.charging_kw * 1000) if tesla else 0
+    # Home demand = total household minus Tesla (Solax includes Tesla in household)
+    home_demand_w = max(0, household_w - tesla_w)
+    surplus_w = max(0, solar_w - home_demand_w)
 
     # Tesla state
     tesla_soc = tesla.battery_level if tesla else 0
@@ -71,17 +74,17 @@ def _build_outlook_prompt(state) -> str:
     if is_night:
         situation = f"""SITUATION: It is nighttime (or past sunset). Solar yield is {solar_w:.0f}W — effectively zero.
 Charging IS still possible but will draw entirely from the grid. 5A charging draws ~1,200W from grid.
-The grid is already importing {grid_import_w:.0f}W for household use — EV charging adds on top of that."""
+The grid is already importing {grid_import_w:.0f}W for home use — EV charging adds on top of that."""
     elif surplus_w < 700:
-        situation = f"""SITUATION: Solar yield is low at {solar_w:.0f}W with {household_w:.0f}W household demand.
+        situation = f"""SITUATION: Solar yield is low at {solar_w:.0f}W with {home_demand_w:.0f}W home demand (excluding Tesla).
 Solar surplus is only {surplus_w:.0f}W. Charging IS possible but will draw ~{grid_draw_at_5a:.0f}W from the grid at 5A.
-The grid is already importing {grid_import_w:.0f}W for household use — EV charging adds on top of that."""
+The grid is already importing {grid_import_w:.0f}W for home use — EV charging adds on top of that."""
     elif surplus_w < 1200:
-        situation = f"""SITUATION: Solar yield is {solar_w:.0f}W with {household_w:.0f}W household demand.
+        situation = f"""SITUATION: Solar yield is {solar_w:.0f}W with {home_demand_w:.0f}W home demand (excluding Tesla).
 Surplus of {surplus_w:.0f}W — can sustain 5A with minor grid draw (~{grid_draw_at_5a:.0f}W from grid)."""
     else:
         max_solar_amps = min(32, int(surplus_w / 240))
-        situation = f"""SITUATION: Good solar conditions. Yield is {solar_w:.0f}W with {household_w:.0f}W household demand.
+        situation = f"""SITUATION: Good solar conditions. Yield is {solar_w:.0f}W with {home_demand_w:.0f}W home demand (excluding Tesla).
 Surplus of {surplus_w:.0f}W supports up to {max_solar_amps}A charging without grid draw."""
 
     strategy_line = ""
@@ -96,7 +99,7 @@ Current time: {current_time}
 {situation}
 
 ACTUAL READINGS (from inverter right now):
-- Solar: {solar_w:.0f}W | Household: {household_w:.0f}W | Grid import: {grid_import_w:.0f}W
+- Solar: {solar_w:.0f}W | Home demand: {home_demand_w:.0f}W (excl. Tesla) | Grid import: {grid_import_w:.0f}W
 - Tesla: {tesla_soc}% → {target_soc}% target ({kwh_needed:.1f} kWh needed)
 - Currently: {charging_state} at {charging_amps}A
 {strategy_line}
