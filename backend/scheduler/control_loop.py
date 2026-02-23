@@ -919,6 +919,7 @@ def build_status_response(state: UserLoopState) -> dict:
             and tesla.charge_current_request > 0
             and tesla.charger_actual_current < tesla.charge_current_request
         ),
+        "last_amps_sent": state.last_amps_sent,
         "ai_enabled": state.ai_enabled,
         "ai_status": state.ai_status,
         "ai_recommended_amps": ai.recommended_amps if ai and ai.is_fresh else 0,

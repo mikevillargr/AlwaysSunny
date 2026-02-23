@@ -45,13 +45,20 @@ async def toggle_optimization(
         vin = creds.get("tessie_vin")
         default_amps = int(settings.get("default_charging_amps", 8))
 
+        from scheduler.control_loop import get_user_state as _get_state
+        _state = _get_state(user_id)
+
         if api_key and vin:
             try:
                 if default_amps >= 5:
                     await set_charging_amps(api_key, vin, default_amps)
+                    if _state:
+                        _state.last_amps_sent = default_amps
                     logger.info(f"[{user_id[:8]}] AI OFF → set default amps: {default_amps}A")
                 else:
                     await stop_charging(api_key, vin)
+                    if _state:
+                        _state.last_amps_sent = 0
                     logger.info(f"[{user_id[:8]}] AI OFF → stopped charging")
             except Exception as e:
                 logger.error(f"[{user_id[:8]}] AI toggle Tessie command failed: {e}")

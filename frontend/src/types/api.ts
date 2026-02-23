@@ -97,6 +97,8 @@ export interface StatusResponse {
   charging_state: ChargingState
   minutes_to_full_charge: number
   tesla_throttled: boolean
+  // Last command sent to Tessie
+  last_amps_sent: number
   // AI state
   ai_enabled: boolean
   ai_status: AIStatus

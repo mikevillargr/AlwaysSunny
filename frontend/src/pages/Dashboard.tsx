@@ -112,6 +112,7 @@ export function Dashboard() {
         teslaThrottled={status.tesla_throttled}
         teslaChargeCurrentRequest={status.tesla_charge_current_request}
         teslaSoc={status.tesla_soc}
+        lastAmpsSent={status.last_amps_sent}
       />
       <ChargingControls
         teslaSoc={status.tesla_soc}

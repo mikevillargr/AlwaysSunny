@@ -13,6 +13,7 @@ interface AmperageControlProps {
   teslaThrottled?: boolean
   teslaChargeCurrentRequest?: number
   teslaSoc?: number
+  lastAmpsSent?: number
 }
 
 export function AmperageControl({
@@ -25,22 +26,24 @@ export function AmperageControl({
   teslaThrottled = false,
   teslaChargeCurrentRequest = 0,
   teslaSoc = 0,
+  lastAmpsSent = -1,
 }: AmperageControlProps) {
   const controlsEnabled = tessieEnabled && chargePortConnected
   const disabled = !controlsEnabled || autoOptimize
   const [localAmps, setLocalAmps] = useState<number>(teslaChargingAmps)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Always show Tesla's actual draw — this is what's really happening.
-  // When AI is controlling and Tesla isn't throttled, show AI recommended amps.
-  // When Tesla is throttled (high SoC), show actual draw since Tesla ignores higher commands.
+  // Priority for display value:
+  // 1. When system has sent a command (lastAmpsSent >= 0): show what we commanded
+  //    This is the ground truth — Tesla may lag behind or throttle, but this is what we told it.
+  // 2. Otherwise: show Tesla's actual current draw
   useEffect(() => {
-    if (autoOptimize && aiRecommendedAmps > 0 && !teslaThrottled) {
-      setLocalAmps(aiRecommendedAmps)
+    if (lastAmpsSent >= 0) {
+      setLocalAmps(lastAmpsSent)
     } else {
       setLocalAmps(teslaChargingAmps)
     }
-  }, [teslaChargingAmps, autoOptimize, aiRecommendedAmps, teslaThrottled])
+  }, [teslaChargingAmps, lastAmpsSent])
 
   const handleSliderChange = (_: unknown, val: number | number[]) => {
     setLocalAmps(val as number)
@@ -168,10 +171,12 @@ export function AmperageControl({
             {!tessieEnabled
               ? 'Tessie disconnected'
               : teslaThrottled
-                ? `Tesla throttled at ${teslaSoc}% SoC (requested ${teslaChargeCurrentRequest}A)`
-                : autoOptimize
-                  ? 'Managed by AI optimizer'
-                  : `${teslaAmperage * 230}W charging rate`}
+                ? `Commanded ${teslaChargeCurrentRequest}A · Tesla drawing ${teslaChargingAmps}A (BMS throttle at ${teslaSoc}% SoC)`
+                : lastAmpsSent >= 0 && lastAmpsSent !== teslaChargingAmps
+                  ? `Commanded ${lastAmpsSent}A · Tesla drawing ${teslaChargingAmps}A`
+                  : autoOptimize
+                    ? 'Managed by AI optimizer'
+                    : `${teslaAmperage * 230}W charging rate`}
           </Typography>
         </Box>
 

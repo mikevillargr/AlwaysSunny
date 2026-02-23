@@ -39,6 +39,7 @@ export const SAMPLE_STATUS = {
   charging_state: 'Charging' as const,
   minutes_to_full_charge: 180,
   tesla_throttled: false,
+  last_amps_sent: -1,
   ai_enabled: true,
   ai_status: 'active' as const,
   ai_recommended_amps: 12,

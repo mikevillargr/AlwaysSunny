@@ -59,6 +59,8 @@ class StatusResponse(BaseModel):
     charging_state: str
     minutes_to_full_charge: int = 0
     tesla_throttled: bool = False
+    # Last command sent to Tessie
+    last_amps_sent: int = -1
     # AI state
     ai_enabled: bool
     ai_status: str
