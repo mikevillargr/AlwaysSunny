@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 import httpx
+
+logger = logging.getLogger(__name__)
 
 TESSIE_BASE_URL = "https://api.tessie.com"
 TIMEOUT = 15
@@ -108,36 +112,44 @@ async def set_charging_amps(api_key: str, vin: str, amps: int) -> dict:
     if amps < 5 or amps > 32:
         raise ValueError(f"Amps must be 5-32, got {amps}")
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{TESSIE_BASE_URL}/{vin}/command/set_charging_amps",
             headers=_headers(api_key),
-            json={"amps": amps},
+            params={"amps": amps, "retry_duration": 40, "wait_for_completion": "true"},
         )
         resp.raise_for_status()
-        return resp.json()
+        result = resp.json()
+        logger.info(f"[Tessie] set_charging_amps({amps}A) → {result}")
+        return result
 
 
 async def start_charging(api_key: str, vin: str) -> dict:
     """Start Tesla charging."""
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{TESSIE_BASE_URL}/{vin}/command/start_charging",
             headers=_headers(api_key),
+            params={"retry_duration": 40, "wait_for_completion": "true"},
         )
         resp.raise_for_status()
-        return resp.json()
+        result = resp.json()
+        logger.info(f"[Tessie] start_charging → {result}")
+        return result
 
 
 async def stop_charging(api_key: str, vin: str) -> dict:
     """Stop Tesla charging."""
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{TESSIE_BASE_URL}/{vin}/command/stop_charging",
             headers=_headers(api_key),
+            params={"retry_duration": 40, "wait_for_completion": "true"},
         )
         resp.raise_for_status()
-        return resp.json()
+        result = resp.json()
+        logger.info(f"[Tessie] stop_charging → {result}")
+        return result
 
 
 def is_at_home_gps(
