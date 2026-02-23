@@ -284,6 +284,8 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
             efficiency_coeff=est_eff,
             solar_to_tesla_w=_calc_solar_to_tesla_w(state),
             live_tesla_solar_pct=_calc_live_tesla_solar_pct(state),
+            tesla_actual_amps=state.tesla.charger_actual_current if state.tesla else 0,
+            tesla_requested_amps=state.tesla.charge_current_request if state.tesla else 0,
         )
 
         # Apply admin AI sensitivity settings if configured
@@ -906,16 +908,23 @@ def build_status_response(state: UserLoopState) -> dict:
         "solax_data_age_secs": solax.data_age_secs if solax else 999,
         "tesla_soc": tesla.battery_level if tesla else 0,
         "tesla_charging_amps": tesla.charger_actual_current if tesla else 0,
+        "tesla_charge_current_request": tesla.charge_current_request if tesla else 0,
         "tesla_charging_kw": tesla.charging_kw if tesla else 0,
         "charge_port_connected": tesla.charge_port_connected if tesla else False,
         "charging_state": tesla.charging_state if tesla else "Disconnected",
         "minutes_to_full_charge": tesla.minutes_to_full_charge if tesla else 0,
+        "tesla_throttled": (
+            tesla is not None
+            and tesla.charging_state == "Charging"
+            and tesla.charge_current_request > 0
+            and tesla.charger_actual_current < tesla.charge_current_request
+        ),
         "ai_enabled": state.ai_enabled,
         "ai_status": state.ai_status,
-        "ai_recommended_amps": ai.recommended_amps if ai else 0,
-        "ai_reasoning": ai.reasoning if ai else "",
-        "ai_confidence": ai.confidence if ai else "low",
-        "ai_trigger_reason": ai.trigger_reason if ai else "scheduled",
+        "ai_recommended_amps": ai.recommended_amps if ai and ai.is_fresh else 0,
+        "ai_reasoning": ai.reasoning if ai and ai.is_fresh else "",
+        "ai_confidence": ai.confidence if ai and ai.is_fresh else "low",
+        "ai_trigger_reason": ai.trigger_reason if ai and ai.is_fresh else "scheduled",
         "ai_last_updated_secs": ai.age_secs if ai else 0,
         "session": session.to_api_dict() if session else None,
         "forecast": forecast.to_api_response(timezone=state.settings.get("timezone", "Asia/Manila")) if forecast else {

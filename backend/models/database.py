@@ -53,10 +53,12 @@ class StatusResponse(BaseModel):
     # Tesla
     tesla_soc: int
     tesla_charging_amps: int
+    tesla_charge_current_request: int = 0
     tesla_charging_kw: float
     charge_port_connected: bool
     charging_state: str
     minutes_to_full_charge: int = 0
+    tesla_throttled: bool = False
     # AI state
     ai_enabled: bool
     ai_status: str

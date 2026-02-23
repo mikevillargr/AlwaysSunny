@@ -10,6 +10,9 @@ interface AmperageControlProps {
   tessieEnabled?: boolean
   chargePortConnected?: boolean
   aiRecommendedAmps?: number
+  teslaThrottled?: boolean
+  teslaChargeCurrentRequest?: number
+  teslaSoc?: number
 }
 
 export function AmperageControl({
@@ -19,21 +22,25 @@ export function AmperageControl({
   tessieEnabled = true,
   chargePortConnected = false,
   aiRecommendedAmps = 0,
+  teslaThrottled = false,
+  teslaChargeCurrentRequest = 0,
+  teslaSoc = 0,
 }: AmperageControlProps) {
   const controlsEnabled = tessieEnabled && chargePortConnected
   const disabled = !controlsEnabled || autoOptimize
   const [localAmps, setLocalAmps] = useState<number>(teslaChargingAmps)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // When AI is controlling, show the AI-recommended amps (command sent to Tessie)
-  // When manual, show Tesla's actual current
+  // Always show Tesla's actual draw — this is what's really happening.
+  // When AI is controlling and Tesla isn't throttled, show AI recommended amps.
+  // When Tesla is throttled (high SoC), show actual draw since Tesla ignores higher commands.
   useEffect(() => {
-    if (autoOptimize && aiRecommendedAmps > 0) {
+    if (autoOptimize && aiRecommendedAmps > 0 && !teslaThrottled) {
       setLocalAmps(aiRecommendedAmps)
     } else {
       setLocalAmps(teslaChargingAmps)
     }
-  }, [teslaChargingAmps, autoOptimize, aiRecommendedAmps])
+  }, [teslaChargingAmps, autoOptimize, aiRecommendedAmps, teslaThrottled])
 
   const handleSliderChange = (_: unknown, val: number | number[]) => {
     setLocalAmps(val as number)
@@ -160,9 +167,11 @@ export function AmperageControl({
           >
             {!tessieEnabled
               ? 'Tessie disconnected'
-              : autoOptimize
-                ? 'Managed by AI optimizer'
-                : `${teslaAmperage * 230}W charging rate`}
+              : teslaThrottled
+                ? `Tesla throttled at ${teslaSoc}% SoC (requested ${teslaChargeCurrentRequest}A)`
+                : autoOptimize
+                  ? 'Managed by AI optimizer'
+                  : `${teslaAmperage * 230}W charging rate`}
           </Typography>
         </Box>
 

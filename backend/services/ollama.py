@@ -193,6 +193,8 @@ def build_prompt(
     efficiency_coeff: float = 0.0,
     solar_to_tesla_w: float = 0.0,
     live_tesla_solar_pct: float = 0.0,
+    tesla_actual_amps: int = 0,
+    tesla_requested_amps: int = 0,
 ) -> str:
     """Build the AI prompt with full context for optimization decision."""
     # --- Pre-compute goal-aware metrics ---
@@ -332,6 +334,10 @@ Max grid import rate: {max_grid_import_w:.0f}W
 Tesla minimum charging rate: 5A (never recommend 1-4A)
 Tesla maximum charging rate: 32A
 Each amp ≈ 240W at 240V circuit (0.24 kWh/h per amp)
+Tesla ACTUAL draw right now: {tesla_actual_amps}A (requested: {tesla_requested_amps}A){f' — THROTTLED by Tesla BMS (SoC={tesla_soc}%)' if tesla_actual_amps < tesla_requested_amps and tesla_actual_amps > 0 else ''}
+IMPORTANT: Above ~80% SoC, Tesla’s BMS reduces accepted amps regardless of what is commanded.
+Do NOT recommend amps higher than what Tesla is actually drawing at high SoC — it won’t help.
+If Tesla is throttled, recommend the actual draw rate or lower, not higher.
 
 === SYSTEM CONFIGURATION ===
 Home battery present: {has_home_battery}

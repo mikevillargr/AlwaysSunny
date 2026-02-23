@@ -91,10 +91,12 @@ export interface StatusResponse {
   // Tesla
   tesla_soc: number
   tesla_charging_amps: number
+  tesla_charge_current_request: number
   tesla_charging_kw: number
   charge_port_connected: boolean
   charging_state: ChargingState
   minutes_to_full_charge: number
+  tesla_throttled: boolean
   // AI state
   ai_enabled: boolean
   ai_status: AIStatus

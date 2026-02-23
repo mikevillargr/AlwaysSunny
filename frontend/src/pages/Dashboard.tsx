@@ -109,6 +109,9 @@ export function Dashboard() {
         tessieEnabled={tessieEnabled}
         chargePortConnected={status.charge_port_connected}
         aiRecommendedAmps={status.ai_recommended_amps}
+        teslaThrottled={status.tesla_throttled}
+        teslaChargeCurrentRequest={status.tesla_charge_current_request}
+        teslaSoc={status.tesla_soc}
       />
       <ChargingControls
         teslaSoc={status.tesla_soc}
