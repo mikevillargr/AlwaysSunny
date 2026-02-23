@@ -163,7 +163,8 @@ class SessionTracker:
         data: session dict for DB write (on "ended") or API response (on "updated")
         """
         # Detect session start: transition from unplugged to plugged at home
-        if plugged_in and at_home and not self._prev_plugged_in:
+        # Guard: never start a new session if one is already active
+        if plugged_in and at_home and not self._prev_plugged_in and self.active is None:
             now = time.time()
             self.active = ActiveSession(
                 user_id=user_id,

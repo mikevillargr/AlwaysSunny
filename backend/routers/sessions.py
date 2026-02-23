@@ -8,15 +8,14 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query, HTTPException
 
 from middleware.auth import get_current_user
-from services.supabase_client import get_sessions, get_active_session, get_session_snapshots, get_supabase_admin
+from services.supabase_client import (
+    get_sessions, get_active_session, get_session_snapshots, get_supabase_admin,
+    close_open_sessions,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# ---------------------------------------------------------------------------
-# Phantom session cleanup
-# ---------------------------------------------------------------------------
 
 PHANTOM_AGE_HOURS = 12  # Sessions open longer than this are considered phantom
 
@@ -24,13 +23,11 @@ PHANTOM_AGE_HOURS = 12  # Sessions open longer than this are considered phantom
 def _close_phantom_sessions(user_id: str) -> int:
     """Auto-close sessions that have no ended_at but started > PHANTOM_AGE_HOURS ago.
 
-    These are orphaned sessions from crashes, restarts, or missed unplug events.
-    Sets ended_at = started_at + duration_mins (if available) or started_at + 1h fallback.
+    Only closes stale sessions — not the currently active one.
     """
     sb = get_supabase_admin()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=PHANTOM_AGE_HOURS)
 
-    # Find phantom sessions: no ended_at, started before cutoff
     result = (
         sb.table("sessions")
         .select("id, started_at, duration_mins")
@@ -44,14 +41,14 @@ def _close_phantom_sessions(user_id: str) -> int:
     for s in result.data or []:
         try:
             started = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
-            dur = s.get("duration_mins") or 60  # fallback 1h
+            dur = s.get("duration_mins") or 60
             ended = started + timedelta(minutes=dur)
             sb.table("sessions").update({
                 "ended_at": ended.isoformat(),
             }).eq("id", s["id"]).execute()
             closed += 1
             logger.info(f"[{user_id[:8]}] Auto-closed phantom session {s['id']} "
-                        f"(started {s['started_at']}, set ended_at={ended.isoformat()})")
+                        f"(started {s['started_at']})")
         except Exception as e:
             logger.warning(f"[{user_id[:8]}] Failed to close phantom session {s['id']}: {e}")
 
@@ -65,7 +62,6 @@ async def list_sessions(
     user: dict = Depends(get_current_user),
 ):
     """Get session history for the authenticated user."""
-    # Auto-close phantom sessions before returning results
     _close_phantom_sessions(user["id"])
     sessions = get_sessions(user["id"], limit=limit, offset=offset)
     return {"sessions": sessions, "count": len(sessions)}

@@ -10,9 +10,10 @@ interface OutlookData {
   cached: boolean
   pending?: boolean
   error?: boolean
+  refresh_mins?: number
 }
 
-const POLL_INTERVAL = 30 * 60 * 1000 // 30 minutes
+const DEFAULT_POLL_MINS = 30
 const ERROR_RETRY_INTERVAL = 30 * 1000 // 30s retry when AI is down
 
 /** Strip any JSON/bracket artifacts from the outlook text */
@@ -47,6 +48,7 @@ export function ChargingOutlook() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(true)
   const [error, setError] = useState(false)
+  const [refreshMins, setRefreshMins] = useState(DEFAULT_POLL_MINS)
 
   const retryRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -58,6 +60,9 @@ export function ChargingOutlook() {
       if (resp.ok) {
         const data: OutlookData = await resp.json()
         setOutlook(data)
+        if (data.refresh_mins && data.refresh_mins > 0) {
+          setRefreshMins(data.refresh_mins)
+        }
         if (data.error || (!data.generated_at && data.text)) {
           // Backend returned an error state — schedule a retry
           setError(true)
@@ -77,15 +82,15 @@ export function ChargingOutlook() {
     }
   }, [])
 
-  // Fetch on mount and poll every hour
+  // Fetch on mount and poll at the configured interval
   useEffect(() => {
     fetchOutlook()
-    const interval = setInterval(() => fetchOutlook(), POLL_INTERVAL)
+    const interval = setInterval(() => fetchOutlook(), refreshMins * 60 * 1000)
     return () => {
       clearInterval(interval)
       if (retryRef.current) clearTimeout(retryRef.current)
     }
-  }, [fetchOutlook])
+  }, [fetchOutlook, refreshMins])
 
   // Brief indicator for collapsed state
   const briefIndicator = () => {
@@ -182,7 +187,7 @@ export function ChargingOutlook() {
             sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5 }}
           >
             <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem' }}>
-              AI-generated · Updates every 30 min · Does not control charging
+              AI-generated · Updates every {refreshMins} min · Does not control charging
             </Typography>
             <Box
               component="span"

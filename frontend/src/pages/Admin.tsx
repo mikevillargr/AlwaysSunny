@@ -30,6 +30,7 @@ interface AISettings {
   ai_stale_threshold_secs: string
   ai_retry_attempts: string
   ai_prompt_style: string
+  outlook_refresh_mins: string
 }
 
 interface TestResult {
@@ -486,6 +487,23 @@ export function Admin() {
                     endAdornment: <InputAdornment position="end">sec</InputAdornment>,
                   }}
                   helperText="Force a new AI call if the last recommendation is older than this. Prevents stale decisions."
+                />
+              </Grid>
+              <Grid item xs={6} sm={4}>
+                <TextField
+                  label="Outlook Refresh"
+                  type="number"
+                  value={aiSettings.outlook_refresh_mins}
+                  onChange={(e) =>
+                    setAiSettings({ ...aiSettings, outlook_refresh_mins: e.target.value })
+                  }
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">min</InputAdornment>,
+                  }}
+                  inputProps={{ min: 5, max: 120 }}
+                  helperText="How often the Charging Outlook regenerates. Min 5 min. Lower = more Ollama calls."
                 />
               </Grid>
             </Grid>

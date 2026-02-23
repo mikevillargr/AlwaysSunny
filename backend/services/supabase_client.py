@@ -74,9 +74,44 @@ def get_session_snapshots(user_id: str, started_at: str, ended_at: str | None) -
 # Session helpers
 # ---------------------------------------------------------------------------
 
-def start_session(user_id: str, session_data: dict) -> dict:
-    """Create a new charging session record. Returns the created row."""
+def close_open_sessions(user_id: str) -> int:
+    """Close any open sessions for a user (ended_at is null). Returns count closed."""
     sb = get_supabase_admin()
+    from datetime import datetime, timezone
+    result = (
+        sb.table("sessions")
+        .select("id, started_at, duration_mins")
+        .eq("user_id", user_id)
+        .is_("ended_at", "null")
+        .execute()
+    )
+    closed = 0
+    for s in result.data or []:
+        try:
+            started = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
+            dur = s.get("duration_mins") or 0
+            if dur > 0:
+                from datetime import timedelta
+                ended = started + timedelta(minutes=dur)
+            else:
+                ended = datetime.now(timezone.utc)
+            sb.table("sessions").update({
+                "ended_at": ended.isoformat(),
+            }).eq("id", s["id"]).execute()
+            closed += 1
+        except Exception:
+            pass
+    return closed
+
+
+def start_session(user_id: str, session_data: dict) -> dict:
+    """Create a new charging session record. Returns the created row.
+
+    Automatically closes any existing open sessions first to prevent overlaps.
+    """
+    sb = get_supabase_admin()
+    # Guard: close any orphaned open sessions before starting a new one
+    close_open_sessions(user_id)
     session_data["user_id"] = user_id
     result = sb.table("sessions").insert(session_data).execute()
     return result.data[0] if result.data else {}

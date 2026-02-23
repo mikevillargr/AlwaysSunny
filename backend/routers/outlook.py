@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-OUTLOOK_CACHE_SECS = 1800  # Refresh at most once per 30 minutes
-OUTLOOK_ERROR_RETRY_SECS = 120  # Retry after 2 min on failure (not 1 hour)
+OUTLOOK_CACHE_SECS_DEFAULT = 1800  # Default: refresh every 30 minutes
+OUTLOOK_ERROR_RETRY_SECS = 120  # Retry after 2 min on failure
 
 
 def _build_outlook_prompt(state) -> str:
@@ -181,10 +181,13 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
             "generated_at": "",
             "cached": False,
             "pending": True,
+            "refresh_mins": 30,
         }
 
     now = time.time()
-    cache_ttl = OUTLOOK_CACHE_SECS
+    # Read user-configurable refresh interval (minutes → seconds)
+    outlook_refresh_mins = int(state.settings.get("outlook_refresh_mins", 30))
+    cache_ttl = max(300, outlook_refresh_mins * 60)  # Floor at 5 min
 
     # Use shorter TTL if last attempt was an error (no generated_at means failure)
     if state.outlook_text and not state.outlook_generated_at:
@@ -196,6 +199,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
             "text": state.outlook_text,
             "generated_at": state.outlook_generated_at,
             "cached": True,
+            "refresh_mins": outlook_refresh_mins,
         }
 
     # Skip re-generation if we recently failed (avoid hammering a dead service)
@@ -205,6 +209,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
             "generated_at": "",
             "cached": True,
             "error": True,
+            "refresh_mins": outlook_refresh_mins,
         }
 
     # Fire generation in background — don't block the HTTP response
@@ -225,10 +230,12 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
             "generated_at": state.outlook_generated_at,
             "cached": True,
             "pending": True,  # Signal that a refresh is in progress
+            "refresh_mins": outlook_refresh_mins,
         }
     return {
         "text": "",
         "generated_at": "",
         "cached": False,
         "pending": True,
+        "refresh_mins": outlook_refresh_mins,
     }

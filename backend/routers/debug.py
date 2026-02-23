@@ -187,6 +187,7 @@ AI_SETTING_KEYS = [
     "ai_stale_threshold_secs",
     "ai_retry_attempts",
     "ai_prompt_style",
+    "outlook_refresh_mins",
 ]
 
 AI_SETTING_DEFAULTS = {
@@ -201,6 +202,7 @@ AI_SETTING_DEFAULTS = {
     "ai_stale_threshold_secs": "360",
     "ai_retry_attempts": "3",
     "ai_prompt_style": "default",
+    "outlook_refresh_mins": "30",
 }
 
 
@@ -217,6 +219,7 @@ class AISensitivityUpdate(BaseModel):
     ai_stale_threshold_secs: Optional[int] = None
     ai_retry_attempts: Optional[int] = None
     ai_prompt_style: Optional[str] = None
+    outlook_refresh_mins: Optional[int] = None
 
 
 @router.get("/admin/ai-settings")
