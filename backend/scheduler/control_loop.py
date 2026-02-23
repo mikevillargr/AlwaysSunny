@@ -563,7 +563,6 @@ async def _control_tick(user_id: str) -> None:
                 departure_time_str = state.settings.get("departure_time", "")
                 if departure_time_str and soc_gap > 0:
                     try:
-                        from datetime import datetime
                         now_dt = datetime.now()
                         dep_h, dep_m = departure_time_str.split(":")[:2]
                         dep_dt = now_dt.replace(hour=int(dep_h), minute=int(dep_m), second=0)
@@ -822,14 +821,20 @@ def _get_ollama_health() -> bool:
 
 
 def _calc_solar_to_tesla_w(state: "UserLoopState") -> float:
-    """Calculate watts of solar currently going to Tesla."""
+    """Calculate watts of solar currently going to Tesla (proportional allocation).
+
+    Solax household_demand_w includes Tesla charging. Solar is physically shared
+    across all loads proportionally, so:
+        solar_to_tesla = solar_w × (tesla_w / household_w)
+    """
     if not state.solax or not state.tesla:
         return 0.0
     solar_w = state.solax.solar_w
     household_w = state.solax.household_demand_w
     tesla_w = state.tesla.charging_kw * 1000
-    surplus = max(0, solar_w - household_w)
-    return min(surplus, tesla_w)
+    if household_w <= 0 or tesla_w <= 0 or solar_w <= 0:
+        return 0.0
+    return min(solar_w * (tesla_w / household_w), tesla_w)
 
 
 def _calc_live_tesla_solar_pct(state: "UserLoopState") -> float:
@@ -862,9 +867,12 @@ def build_status_response(state: UserLoopState) -> dict:
     tesla_w = (tesla.charging_kw * 1000) if tesla else 0
     is_charging = tesla and tesla.charging_state == "Charging" and tesla.charge_port_connected
 
-    # Watts of solar currently going to Tesla
-    solar_to_tesla_w = max(0, solar_w - household_w)
-    solar_to_tesla_w = min(solar_to_tesla_w, tesla_w)
+    # Watts of solar currently going to Tesla (proportional allocation)
+    # household_w includes Tesla charging, so solar is shared proportionally
+    if household_w > 0 and tesla_w > 0 and solar_w > 0:
+        solar_to_tesla_w = min(solar_w * (tesla_w / household_w), tesla_w)
+    else:
+        solar_to_tesla_w = 0.0
 
     # Live Tesla solar subsidy %
     if is_charging and tesla_w > 0:
