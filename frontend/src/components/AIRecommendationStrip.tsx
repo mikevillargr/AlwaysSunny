@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, Chip, Switch, FormControlLabel } from '@mui/material'
+import { Box, Typography, Chip, Switch, FormControlLabel, CircularProgress } from '@mui/material'
 import { Bot, TrendingUp, AlertTriangle } from 'lucide-react'
 import type { AIConfidence } from '../types/api'
 
@@ -12,6 +12,7 @@ interface AIRecommendationStripProps {
   aiStatus?: string
   tessieEnabled?: boolean
   chargePortConnected?: boolean
+  loading?: boolean
 }
 export function AIRecommendationStrip({
   autoOptimize,
@@ -22,10 +23,12 @@ export function AIRecommendationStrip({
   aiStatus = 'standby',
   tessieEnabled = true,
   chargePortConnected = false,
+  loading = false,
 }: AIRecommendationStripProps) {
   const aiToggleEnabled = tessieEnabled && chargePortConnected
   const isError = aiStatus.startsWith('error:')
   const isFallback = aiStatus === 'fallback' || isError
+  const isWaiting = autoOptimize && !aiReasoning && !isError
 
   // Determine lockout reason
   const lockoutReason = !tessieEnabled
@@ -113,16 +116,20 @@ export function AIRecommendationStrip({
               mt: 0.5,
             }}
           >
-            <Typography
-              variant="subtitle1"
-              fontWeight="700"
-              color={autoOptimize ? 'text.primary' : 'text.disabled'}
-              sx={{
-                lineHeight: 1,
-              }}
-            >
-              {aiRecommendedAmps}A
-            </Typography>
+            {(loading || isWaiting) && autoOptimize ? (
+              <CircularProgress size={16} sx={{ color: '#a855f7' }} />
+            ) : (
+              <Typography
+                variant="subtitle1"
+                fontWeight="700"
+                color={autoOptimize ? 'text.primary' : 'text.disabled'}
+                sx={{
+                  lineHeight: 1,
+                }}
+              >
+                {aiRecommendedAmps}A
+              </Typography>
+            )}
             <Chip
               label={`${aiConfidence} confidence`}
               size="small"
@@ -197,11 +204,13 @@ export function AIRecommendationStrip({
             ? `"${lockoutReason}"`
             : !autoOptimize
               ? '"Auto-optimization paused. Manual control active."'
-              : isError
-                ? '"AI temporarily unavailable — using rule-based charging. Toggle off and on to retry."'
-                : isFallback
-                  ? '"AI recommendation expired — using rule-based charging until next update."'
-                  : `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`}
+              : (loading || isWaiting)
+                ? '"Calling AI optimizer — analyzing solar and charging data..."'
+                : isError
+                  ? '"AI temporarily unavailable — using rule-based charging. Toggle off and on to retry."'
+                  : isFallback
+                    ? '"AI recommendation expired — using rule-based charging until next update."'
+                    : `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`}
         </Typography>
       </Box>
 

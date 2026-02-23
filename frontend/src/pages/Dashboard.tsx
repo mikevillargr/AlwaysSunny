@@ -13,7 +13,7 @@ import { useStatus } from '../hooks/useStatus'
 import { apiFetch } from '../lib/api'
 
 export function Dashboard() {
-  const { status, loading } = useStatus()
+  const { status, loading, refresh } = useStatus()
   const [autoOptimize, setAutoOptimize] = useState(status.ai_enabled)
   const [tessieEnabled, setTessieEnabled] = useState(status.tessie_enabled)
 
@@ -32,11 +32,13 @@ export function Dashboard() {
         method: 'POST',
         body: JSON.stringify({ enabled: value }),
       })
+      // Refresh status immediately to pick up new AI recommendation
+      refresh()
     } catch (e) {
       console.warn('[Dashboard] Failed to toggle AI:', e)
       setAutoOptimize(!value)
     }
-  }, [])
+  }, [refresh])
 
   const handleTessieToggle = useCallback(async (value: boolean) => {
     setTessieEnabled(value)
@@ -84,6 +86,7 @@ export function Dashboard() {
         aiStatus={status.ai_status}
         tessieEnabled={tessieEnabled}
         chargePortConnected={status.charge_port_connected}
+        loading={loading}
       />
       <AmperageControl
         autoOptimize={autoOptimize}
