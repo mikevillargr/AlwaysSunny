@@ -62,11 +62,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
   const grid = session.grid_kwh ?? 0
   const saved = session.saved_amount ?? 0
   const isActive = !session.ended_at
-
-  // Detect phantom: no ended_at but started > 12h ago (shouldn't happen after backend cleanup, but defensive)
   const startedDate = new Date(session.started_at)
-  const hoursAgo = (Date.now() - startedDate.getTime()) / (1000 * 60 * 60)
-  const isPhantom = isActive && hoursAgo > 12
 
   const handleToggle = () => {
     const willExpand = !expanded
@@ -88,7 +84,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
         mb: 2,
         p: 2,
         cursor: 'pointer',
-        ...(isActive && !isPhantom && {
+        ...(isActive && {
           border: '1px solid #22c55e40',
           boxShadow: '0 0 12px #22c55e15',
         }),
@@ -108,7 +104,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
             <Typography variant="subtitle1" fontWeight="600" color="text.primary">
               {formatDate(session.started_at)}
             </Typography>
-            {isActive && !isPhantom && (
+            {isActive && (
               <Chip
                 label="LIVE"
                 size="small"
@@ -129,13 +125,11 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
           </Box>
           <Typography variant="body2" color="text.secondary">
             {formatTime(session.started_at)}
-            {isActive && !isPhantom
+            {isActive
               ? ' → In progress'
-              : isPhantom
-                ? ' → Incomplete'
-                : ` → ${formatTime(session.ended_at)}`}
+              : ` → ${formatTime(session.ended_at)}`}
             {' · '}
-            {isActive && !isPhantom
+            {isActive
               ? formatDuration(Math.round((Date.now() - startedDate.getTime()) / 60000))
               : formatDuration(session.duration_mins)}
           </Typography>
@@ -192,7 +186,7 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
                 SoC Range
               </Typography>
               <Typography variant="body2" fontWeight="600" color="text.primary">
-                {session.start_soc ?? '—'}% → {session.end_soc ?? (isActive && !isPhantom ? 'charging' : '—')}%
+                {session.start_soc ?? '—'}% → {session.end_soc ?? (isActive ? 'charging' : '—')}%
                 {session.target_soc ? ` (target ${session.target_soc}%)` : ''}
               </Typography>
             </Grid>
