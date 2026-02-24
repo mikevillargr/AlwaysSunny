@@ -61,9 +61,34 @@ async def list_sessions(
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
 ):
-    """Get session history for the authenticated user."""
+    """Get session history for the authenticated user.
+
+    For the active (in-progress) session, overlays live stats from the
+    in-memory session tracker so the History page mirrors the dashboard.
+    """
     _close_phantom_sessions(user["id"])
     sessions = get_sessions(user["id"], limit=limit, offset=offset)
+
+    # Overlay live session tracker data onto the active session
+    try:
+        from scheduler.control_loop import get_user_state
+        state = get_user_state(user["id"])
+        if state and state.session_tracker.active:
+            live = state.session_tracker.active
+            for s in sessions:
+                if not s.get("ended_at") and s["id"] == live.db_session_id:
+                    s["kwh_added"] = round(live.kwh_added, 2)
+                    s["solar_kwh"] = round(live.solar_kwh, 2)
+                    s["grid_kwh"] = round(live.grid_kwh, 2)
+                    s["solar_pct"] = round(live.solar_pct, 1)
+                    s["saved_amount"] = round(live.saved_amount, 2)
+                    s["end_soc"] = live.current_soc
+                    s["duration_mins"] = live.elapsed_mins
+                    s["subsidy_calculation_method"] = live.subsidy_calculation_method
+                    break
+    except Exception as e:
+        logger.warning(f"[{user['id'][:8]}] Failed to overlay live session data: {e}")
+
     return {"sessions": sessions, "count": len(sessions)}
 
 
