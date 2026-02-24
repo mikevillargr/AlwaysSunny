@@ -19,6 +19,42 @@ import {
 } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
+// Convert 12h time ("01:30") + period ("PM") to 24h format ("13:30")
+function to24h(time12: string, period: 'AM' | 'PM'): string {
+  const [hStr, mStr] = time12.split(':')
+  let h = parseInt(hStr, 10)
+  if (period === 'AM' && h === 12) h = 0
+  else if (period === 'PM' && h !== 12) h += 12
+  return `${String(h).padStart(2, '0')}:${mStr}`
+}
+
+// Convert 24h time ("13:30") to 12h time + period
+function from24h(time24: string): { time12: string; period: 'AM' | 'PM' } {
+  const [hStr, mStr] = time24.split(':')
+  let h = parseInt(hStr, 10)
+  const period: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM'
+  if (h === 0) h = 12
+  else if (h > 12) h -= 12
+  return { time12: `${String(h).padStart(2, '0')}:${mStr}`, period }
+}
+
+// Compute "leaving in Xh Ym" from a 24h departure time
+function computeLeavingIn(time24: string): string {
+  const now = new Date()
+  const [hStr, mStr] = time24.split(':')
+  const dep = new Date(now)
+  dep.setHours(parseInt(hStr, 10), parseInt(mStr, 10), 0, 0)
+  // If departure is in the past, it's tomorrow
+  if (dep.getTime() <= now.getTime()) dep.setDate(dep.getDate() + 1)
+  const diffMs = dep.getTime() - now.getTime()
+  const totalMins = Math.round(diffMs / 60000)
+  if (totalMins < 1) return 'now'
+  const h = Math.floor(totalMins / 60)
+  const m = totalMins % 60
+  if (h === 0) return `${m}m`
+  return `${h}h ${m}m`
+}
+
 interface ChargingControlsProps {
   teslaSoc: number
   gridImportW: number
@@ -82,7 +118,11 @@ export function ChargingControls({
               setGridImportLimit(limit)
             }
           }
-          if (data.departure_time) setDepartureTime(data.departure_time)
+          if (data.departure_time) {
+            const parsed = from24h(data.departure_time)
+            setDepartureTime(parsed.time12)
+            setDeparturePeriod(parsed.period)
+          }
           if (data.charging_strategy) setChargingMode(data.charging_strategy)
         }
       } catch (e) {
@@ -110,6 +150,16 @@ export function ChargingControls({
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => saveSettingsNow(updates), 400)
   }, [saveSettingsNow])
+
+  // Compute "leaving in" text, updating every 30s
+  const [leavingIn, setLeavingIn] = useState('')
+  useEffect(() => {
+    const update = () => setLeavingIn(computeLeavingIn(to24h(departureTime, departurePeriod)))
+    update()
+    const iv = setInterval(update, 30_000)
+    return () => clearInterval(iv)
+  }, [departureTime, departurePeriod])
+
   return (
     <Card
       sx={{
@@ -276,7 +326,11 @@ export function ChargingControls({
               <TextField
                 type="time"
                 value={departureTime}
-                onChange={(e) => setDepartureTime(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setDepartureTime(val)
+                  saveSettings({ departure_time: to24h(val, departurePeriod) })
+                }}
                 variant="outlined"
                 size="small"
                 sx={{
@@ -316,7 +370,10 @@ export function ChargingControls({
                   return (
                     <Box
                       key={p}
-                      onClick={() => setDeparturePeriod(p)}
+                      onClick={() => {
+                        setDeparturePeriod(p)
+                        saveSettingsNow({ departure_time: to24h(departureTime, p) })
+                      }}
                       sx={{
                         px: 1.25,
                         py: 0.5,
@@ -353,7 +410,7 @@ export function ChargingControls({
               </Box>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              leaving in 21h 8m
+              leaving in {leavingIn}
             </Typography>
           </Box>
 

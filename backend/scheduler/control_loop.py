@@ -580,9 +580,17 @@ async def _control_tick(user_id: str) -> None:
                 departure_time_str = state.settings.get("departure_time", "")
                 if departure_time_str and soc_gap > 0:
                     try:
-                        now_dt = datetime.now()
+                        try:
+                            from zoneinfo import ZoneInfo
+                        except ImportError:
+                            from backports.zoneinfo import ZoneInfo
+                        user_tz = state.settings.get("timezone", "Asia/Manila")
+                        try:
+                            now_dt = datetime.now(ZoneInfo(user_tz))
+                        except Exception:
+                            now_dt = datetime.now()
                         dep_h, dep_m = departure_time_str.split(":")[:2]
-                        dep_dt = now_dt.replace(hour=int(dep_h), minute=int(dep_m), second=0)
+                        dep_dt = now_dt.replace(hour=int(dep_h), minute=int(dep_m), second=0, microsecond=0)
                         if dep_dt <= now_dt:
                             dep_dt = dep_dt.replace(day=dep_dt.day + 1)
                         mins_until_departure = (dep_dt - now_dt).total_seconds() / 60
