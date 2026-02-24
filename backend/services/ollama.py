@@ -274,7 +274,7 @@ def build_prompt(
         else:
             goal_summary = f"Cannot finish with solar before sunset — would need {hours_at_max_solar:.1f}h but only {hours_until_sunset:.1f}h left. Solar-first mode: accept partial charge."
     elif charging_strategy == "departure" and departure_feasible:
-        goal_summary = departure_feasible
+        goal_summary = f"{departure_feasible} — {hours_to_departure:.1f}h to departure, need {min_amps_for_departure}A minimum."
     else:
         goal_summary = f"Need {kwh_remaining:.1f} kWh more. At {current_amps}A: {hours_at_current:.1f}h. At 32A: {hours_at_max:.1f}h."
 
@@ -297,7 +297,11 @@ def build_prompt(
             else:
                 eta_vs_departure = f"\nTesla ETA vs departure: BEHIND — would finish {minutes_to_full_charge - departure_mins:.0f} min AFTER departure at current rate. Must increase amps."
 
-        strategy_block = f"""Mode: DEPARTURE — Ready by {departure_time}
+        strategy_block = f"""Mode: DEPARTURE — Car MUST be at {target_soc}% by {departure_time}
+GOAL: Reaching target SoC by departure is the HARD constraint. Solar efficiency is the optimization within that constraint.
+  - If on track or ahead: stay solar-only, save grid budget. Be patient and let solar do the work.
+  - If behind pace: pull from grid immediately. Missing departure is worse than using grid energy.
+  - If well ahead (would finish >2h early): consider reducing amps to maximize solar share.
 Current time: {current_time or 'unknown'}
 Hours until departure: {hours_to_departure:.1f}h
 Minimum amps to reach target by departure: {min_amps_for_departure}A
