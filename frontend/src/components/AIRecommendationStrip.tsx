@@ -26,10 +26,12 @@ export function AIRecommendationStrip({
   loading = false,
 }: AIRecommendationStripProps) {
   const aiToggleEnabled = tessieEnabled && chargePortConnected
+  // Visual state: show as OFF when the toggle can't function (car unplugged, Tessie off)
+  const visuallyActive = autoOptimize && aiToggleEnabled
   const isError = aiStatus.startsWith('error:')
   const isFallback = aiStatus === 'fallback' || isError
   const isPending = aiStatus === 'pending'
-  const isWaiting = autoOptimize && (!aiReasoning || isPending) && !isError
+  const isWaiting = visuallyActive && (!aiReasoning || isPending) && !isError
 
   // Determine lockout reason
   const lockoutReason = !tessieEnabled
@@ -47,19 +49,15 @@ export function AIRecommendationStrip({
         px: 3,
         py: 2,
         borderRadius: 2,
-        bgcolor: !aiToggleEnabled
-          ? 'rgba(255,255,255,0.02)'
-          : autoOptimize
-            ? 'rgba(168, 85, 247, 0.07)'
-            : 'rgba(255,255,255,0.03)',
+        bgcolor: visuallyActive
+          ? 'rgba(168, 85, 247, 0.07)'
+          : 'rgba(255,255,255,0.03)',
         border: '1px solid',
-        borderColor: !aiToggleEnabled
-          ? 'rgba(255,255,255,0.05)'
-          : autoOptimize
-            ? 'rgba(168, 85, 247, 0.2)'
-            : 'rgba(255,255,255,0.08)',
+        borderColor: visuallyActive
+          ? 'rgba(168, 85, 247, 0.2)'
+          : 'rgba(255,255,255,0.08)',
         borderLeft: '3px solid',
-        borderLeftColor: !aiToggleEnabled ? '#2a3f57' : autoOptimize ? '#a855f7' : '#2a3f57',
+        borderLeftColor: visuallyActive ? '#a855f7' : '#2a3f57',
         mb: 3,
         flexWrap: {
           xs: 'wrap',
@@ -67,7 +65,6 @@ export function AIRecommendationStrip({
         },
         transition: 'all 0.2s ease',
         opacity: aiToggleEnabled ? 1 : 0.45,
-        pointerEvents: aiToggleEnabled ? 'auto' : 'none',
       }}
     >
       {/* Icon + Label */}
@@ -87,14 +84,14 @@ export function AIRecommendationStrip({
             width: 34,
             height: 34,
             borderRadius: '50%',
-            bgcolor: autoOptimize
+            bgcolor: visuallyActive
               ? 'rgba(168, 85, 247, 0.15)'
               : 'rgba(255,255,255,0.05)',
             flexShrink: 0,
             transition: 'all 0.2s ease',
           }}
         >
-          <Bot color={autoOptimize ? '#a855f7' : '#4a6382'} size={18} />
+          <Bot color={visuallyActive ? '#a855f7' : '#4a6382'} size={18} />
         </Box>
         <Box>
           <Typography
@@ -117,13 +114,13 @@ export function AIRecommendationStrip({
               mt: 0.5,
             }}
           >
-            {(loading || isWaiting) && autoOptimize && aiToggleEnabled ? (
+            {(loading || isWaiting) && visuallyActive ? (
               <CircularProgress size={16} sx={{ color: '#a855f7' }} />
             ) : (
               <Typography
                 variant="subtitle1"
                 fontWeight="700"
-                color={autoOptimize ? 'text.primary' : 'text.disabled'}
+                color={visuallyActive ? 'text.primary' : 'text.disabled'}
                 sx={{
                   lineHeight: 1,
                 }}
@@ -137,12 +134,12 @@ export function AIRecommendationStrip({
               sx={{
                 height: 18,
                 fontSize: '0.6rem',
-                bgcolor: autoOptimize
+                bgcolor: visuallyActive
                   ? 'rgba(245, 158, 11, 0.1)'
                   : 'rgba(255,255,255,0.04)',
-                color: autoOptimize ? '#f59e0b' : '#4a6382',
+                color: visuallyActive ? '#f59e0b' : '#4a6382',
                 border: '1px solid',
-                borderColor: autoOptimize
+                borderColor: visuallyActive
                   ? 'rgba(245, 158, 11, 0.2)'
                   : 'rgba(255,255,255,0.08)',
               }}
@@ -156,7 +153,7 @@ export function AIRecommendationStrip({
         sx={{
           width: '1px',
           height: 36,
-          bgcolor: autoOptimize
+          bgcolor: visuallyActive
             ? 'rgba(168, 85, 247, 0.2)'
             : 'rgba(255,255,255,0.08)',
           flexShrink: 0,
@@ -175,18 +172,18 @@ export function AIRecommendationStrip({
           gap: 1,
           flexGrow: 1,
           minWidth: 0,
-          opacity: autoOptimize ? 1 : 0.35,
+          opacity: visuallyActive ? 1 : 0.35,
           transition: 'opacity 0.2s ease',
         }}
       >
         <TrendingUp
           size={14}
-          color={autoOptimize ? '#a855f7' : '#4a6382'}
+          color={visuallyActive ? '#a855f7' : '#4a6382'}
           style={{
             flexShrink: 0,
           }}
         />
-        {isError && autoOptimize && (
+        {isError && visuallyActive && (
           <AlertTriangle
             size={14}
             color="#f59e0b"
@@ -195,7 +192,7 @@ export function AIRecommendationStrip({
         )}
         <Typography
           variant="body2"
-          color={isError && autoOptimize ? '#f59e0b' : 'text.secondary'}
+          color={isError && visuallyActive ? '#f59e0b' : 'text.secondary'}
           sx={{
             fontStyle: 'italic',
             lineHeight: 1.5,
@@ -228,7 +225,7 @@ export function AIRecommendationStrip({
         <FormControlLabel
           control={
             <Switch
-              checked={autoOptimize}
+              checked={visuallyActive}
               onChange={(e) => onAutoOptimizeChange(e.target.checked)}
               disabled={!aiToggleEnabled}
               sx={{
@@ -249,7 +246,7 @@ export function AIRecommendationStrip({
                 gap: 1,
               }}
             >
-              {autoOptimize && (
+              {visuallyActive && (
                 <Box
                   className="pulsing-dot"
                   sx={{
@@ -265,7 +262,7 @@ export function AIRecommendationStrip({
               <Typography
                 variant="body2"
                 fontWeight="600"
-                color={autoOptimize ? '#a855f7' : 'text.disabled'}
+                color={visuallyActive ? '#a855f7' : 'text.disabled'}
                 sx={{
                   whiteSpace: 'nowrap',
                 }}

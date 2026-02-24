@@ -433,7 +433,7 @@ async def _generate(
     if format_json:
         payload["format"] = "json"
 
-    global _ollama_healthy
+    global _ollama_healthy, _ollama_inference_failures, _ollama_last_inference_ok
     last_error: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
@@ -446,6 +446,8 @@ async def _generate(
                 if attempt > 1:
                     logger.info(f"Ollama [{model}] succeeded on attempt {attempt}")
                 _ollama_healthy = True
+                _ollama_inference_failures = 0
+                _ollama_last_inference_ok = time.time()
                 return resp.json()
         except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as e:
             last_error = e
@@ -474,6 +476,7 @@ async def _generate(
                 raise
 
     _ollama_healthy = False
+    _ollama_inference_failures += 1
     raise last_error or Exception(f"Ollama [{model}] call failed after all retries")
 
 
@@ -599,6 +602,8 @@ async def call_ollama_text(
 _ollama_healthy: bool = False
 _ollama_last_check: float = 0
 _ollama_consecutive_failures: int = 0
+_ollama_inference_failures: int = 0  # Tracks inference timeouts (tags OK but generate hangs)
+_ollama_last_inference_ok: float = 0  # Last successful inference timestamp
 
 
 def is_ollama_healthy() -> bool:
@@ -751,14 +756,16 @@ async def warmup_model() -> None:
 async def ollama_health_monitor() -> None:
     """Background task that periodically checks Ollama health.
 
-    Runs every 60s. If Ollama is down for 3+ consecutive checks,
-    attempts a container restart via Docker socket.
+    Runs every 60s. Detects two failure modes:
+    1. Connectivity failure: /api/tags unreachable → restart after 3 checks
+    2. Inference hang: /api/tags OK but /api/generate times out → restart after 2 failures
     """
     import asyncio
     import logging
     logger = logging.getLogger(__name__)
 
-    # Run first check immediately, then every 60s
+    global _ollama_inference_failures
+
     first_run = True
     while True:
         if first_run:
@@ -766,28 +773,44 @@ async def ollama_health_monitor() -> None:
         else:
             await asyncio.sleep(60)
         ok, detail = await check_ollama_health()
-        if ok:
+
+        if not ok:
+            logger.warning(f"Ollama health check failed ({_ollama_consecutive_failures}x): {detail}")
+
+            # After 3 consecutive connectivity failures, try restarting
+            if _ollama_consecutive_failures >= 3 and _ollama_consecutive_failures % 3 == 0:
+                logger.error(
+                    f"Ollama down for {_ollama_consecutive_failures} checks — "
+                    f"attempting container restart..."
+                )
+                restarted = await _try_restart_ollama_container()
+                if restarted:
+                    await asyncio.sleep(30)
+                    ok2, detail2 = await check_ollama_health()
+                    if ok2:
+                        logger.info(f"Ollama recovered after restart: {detail2}")
+                        asyncio.create_task(warmup_model())
+                    else:
+                        logger.error(f"Ollama still down after restart: {detail2}")
             continue
 
-        logger.warning(f"Ollama health check failed ({_ollama_consecutive_failures}x): {detail}")
-
-        # After 3 consecutive failures, try restarting the container
-        if _ollama_consecutive_failures >= 3 and _ollama_consecutive_failures % 3 == 0:
+        # Connectivity OK — check for inference hangs
+        # If inference has failed 2+ times but tags responds fine, the model is stuck
+        if _ollama_inference_failures >= 2:
             logger.error(
-                f"Ollama down for {_ollama_consecutive_failures} checks — "
-                f"attempting container restart..."
+                f"Ollama inference hung ({_ollama_inference_failures} consecutive timeouts, "
+                f"but /api/tags responds) — attempting container restart..."
             )
             restarted = await _try_restart_ollama_container()
             if restarted:
-                # Wait for container to come back up
+                _ollama_inference_failures = 0
                 await asyncio.sleep(30)
                 ok2, detail2 = await check_ollama_health()
                 if ok2:
-                    logger.info(f"Ollama recovered after restart: {detail2}")
-                    # Re-warm the model
+                    logger.info(f"Ollama recovered after inference-hang restart: {detail2}")
                     asyncio.create_task(warmup_model())
                 else:
-                    logger.error(f"Ollama still down after restart: {detail2}")
+                    logger.error(f"Ollama still down after inference-hang restart: {detail2}")
 
 
 async def test_ollama_connection() -> tuple[bool, str]:
