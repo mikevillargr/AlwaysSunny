@@ -11,7 +11,7 @@ from config import get_settings
 # Separate timeouts: connect should be fast, but read (inference) can be slow
 # especially on cold start when Ollama needs to load the model into VRAM
 CONNECT_TIMEOUT = 15
-READ_TIMEOUT = 180  # 7B models can take 60-120s on first call after idle
+READ_TIMEOUT = 60  # 60s is generous — if no response by then, model is stuck
 TIMEOUT = httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
 
 

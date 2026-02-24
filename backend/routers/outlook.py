@@ -214,6 +214,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
 
     # Fire generation in background — don't block the HTTP response
     # Ollama can take 30-180s; blocking makes the outlook card appear stuck
+    prev_fetch = state.last_outlook_fetch
     state.last_outlook_fetch = now
 
     async def _bg_generate():
@@ -223,8 +224,10 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
 
     asyncio.create_task(_bg_generate())
 
-    # Return existing cached text if available, otherwise pending
-    if state.outlook_text and state.outlook_generated_at:
+    # Return existing cached text ONLY if it's not excessively stale (< 2x TTL).
+    # Beyond that, the text is too old to be useful (e.g. nighttime text at 10am).
+    text_is_very_stale = prev_fetch > 0 and (now - prev_fetch) > cache_ttl * 2
+    if state.outlook_text and state.outlook_generated_at and not text_is_very_stale:
         return {
             "text": state.outlook_text,
             "generated_at": state.outlook_generated_at,

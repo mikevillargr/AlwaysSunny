@@ -293,40 +293,55 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
         ai_temp = state.settings.get("ai_temperature")
         ai_tokens = state.settings.get("ai_max_tokens")
         ai_retries = state.settings.get("ai_retry_attempts")
-        state.ai_recommendation = await call_ollama(
-            prompt,
-            trigger_reason,
-            max_retries=int(ai_retries) if ai_retries else 3,
-            model_override=ai_model,
-            temperature_override=float(ai_temp) if ai_temp else None,
-            max_tokens_override=int(ai_tokens) if ai_tokens else None,
-        )
 
-        # Apply admin amp clamps if configured
-        ai_min = int(state.settings.get("ai_min_amps", 5))
-        ai_max = int(state.settings.get("ai_max_amps", 32))
-        raw_amps = state.ai_recommendation.recommended_amps
-        if raw_amps > 0:  # don't clamp 0 (stop charging)
-            clamped = max(ai_min, min(ai_max, raw_amps))
-            if clamped != raw_amps:
-                logger.info(
-                    f"[{state.user_id[:8]}] AI amps clamped: {raw_amps}A → {clamped}A "
-                    f"(admin range {ai_min}-{ai_max}A)"
+        # Fire AI call as a background task so it doesn't block the control loop.
+        # Ollama can take 30-180s; blocking prevents Solax/Tessie polling and status updates.
+        import asyncio
+
+        async def _bg_ai_call():
+            try:
+                rec = await call_ollama(
+                    prompt,
+                    trigger_reason,
+                    max_retries=int(ai_retries) if ai_retries else 3,
+                    model_override=ai_model,
+                    temperature_override=float(ai_temp) if ai_temp else None,
+                    max_tokens_override=int(ai_tokens) if ai_tokens else None,
                 )
-                state.ai_recommendation.recommended_amps = clamped
 
-        state.ai_status = "active"
+                # Apply admin amp clamps if configured
+                ai_min = int(state.settings.get("ai_min_amps", 5))
+                ai_max = int(state.settings.get("ai_max_amps", 32))
+                raw_amps = rec.recommended_amps
+                if raw_amps > 0:  # don't clamp 0 (stop charging)
+                    clamped = max(ai_min, min(ai_max, raw_amps))
+                    if clamped != raw_amps:
+                        logger.info(
+                            f"[{state.user_id[:8]}] AI amps clamped: {raw_amps}A → {clamped}A "
+                            f"(admin range {ai_min}-{ai_max}A)"
+                        )
+                        rec.recommended_amps = clamped
+
+                state.ai_recommendation = rec
+                state.ai_status = "active"
+                logger.info(
+                    f"[{state.user_id[:8]}] AI: {rec.recommended_amps}A "
+                    f"({rec.confidence}) — {rec.reasoning[:60]}"
+                )
+            except Exception as e:
+                error_type = type(e).__name__
+                state.ai_status = f"error:{error_type}"
+                logger.error(f"[{state.user_id[:8]}] AI call failed ({error_type}): {e}")
+                # Don't clear ai_recommendation — keep last good one for graceful degradation
+                # The is_fresh check will naturally expire it after 6 min
+
         state.last_ai_call = now
-        logger.info(
-            f"[{state.user_id[:8]}] AI: {state.ai_recommendation.recommended_amps}A "
-            f"({state.ai_recommendation.confidence}) — {state.ai_recommendation.reasoning[:60]}"
-        )
+        state.ai_status = "pending"
+        asyncio.create_task(_bg_ai_call())
     except Exception as e:
         error_type = type(e).__name__
         state.ai_status = f"error:{error_type}"
-        logger.error(f"[{state.user_id[:8]}] AI call failed ({error_type}): {e}")
-        # Don't clear ai_recommendation — keep last good one for graceful degradation
-        # The is_fresh check will naturally expire it after 6 min
+        logger.error(f"[{state.user_id[:8]}] AI call setup failed ({error_type}): {e}")
 
 
 def _estimate_available_w(state: UserLoopState) -> tuple[float, float, float]:
