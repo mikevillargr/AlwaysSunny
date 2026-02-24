@@ -11,7 +11,7 @@ from config import get_settings
 # Separate timeouts: connect should be fast, but read (inference) can be slow
 # especially on cold start when Ollama needs to load the model into VRAM
 CONNECT_TIMEOUT = 15
-READ_TIMEOUT = 60  # 60s is generous — if no response by then, model is stuck
+READ_TIMEOUT = 120  # 120s — first inference after cold restart can take 60-90s on CPU-only VPS
 TIMEOUT = httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
 
 
@@ -799,8 +799,10 @@ async def ollama_health_monitor() -> None:
             continue
 
         # Connectivity OK — check for inference hangs
-        # If inference has failed 2+ times but tags responds fine, the model is stuck
-        if _ollama_inference_failures >= 2:
+        # If inference has failed 4+ times but tags responds fine, the model is stuck.
+        # Threshold is 4 (not 2) because after a cold restart the first 2-3 inferences
+        # naturally timeout while the model loads into RAM on a CPU-only VPS.
+        if _ollama_inference_failures >= 4:
             logger.error(
                 f"Ollama inference hung ({_ollama_inference_failures} consecutive timeouts, "
                 f"but /api/tags responds) — attempting container restart..."
