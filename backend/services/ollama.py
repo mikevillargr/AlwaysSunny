@@ -11,7 +11,7 @@ from config import get_settings
 # Separate timeouts: connect should be fast, but read (inference) can be slow
 # especially on cold start when Ollama needs to load the model into VRAM
 CONNECT_TIMEOUT = 15
-READ_TIMEOUT = 120  # 120s — first inference after cold restart can take 60-90s on CPU-only VPS
+READ_TIMEOUT = 180  # 180s — qwen2.5:7b takes ~2min for full prompts on CPU-only VPS
 TIMEOUT = httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
 
 
