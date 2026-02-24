@@ -28,6 +28,8 @@ class ActiveSession:
     saved_amount: float = 0.0
     current_soc: int = 0
     _last_tick_time: float = 0.0  # for accumulating solar kWh tick-by-tick
+    _prev_charge_energy_added: float = 0.0  # detect Tesla counter resets
+    _kwh_added_offset: float = 0.0  # accumulated kWh from previous charge segments
 
     @property
     def elapsed_mins(self) -> int:
@@ -57,7 +59,13 @@ class ActiveSession:
         self.grid_kwh = max(0, current_consume_energy_kwh - self.start_grid_kwh)
 
         # Total kWh added — use Tesla's own counter (much more accurate than SoC delta)
-        self.kwh_added = charge_energy_added if charge_energy_added > 0 else 0.0
+        # Tesla resets charge_energy_added to 0 when charging is interrupted and resumed.
+        # Detect resets and accumulate across segments to preserve session totals.
+        if charge_energy_added < self._prev_charge_energy_added - 0.1:
+            # Counter reset detected — save what we had before the reset
+            self._kwh_added_offset += self._prev_charge_energy_added
+        self._prev_charge_energy_added = charge_energy_added
+        self.kwh_added = self._kwh_added_offset + (charge_energy_added if charge_energy_added > 0 else 0.0)
 
         # Accumulate solar kWh tick-by-tick using proportional allocation
         # solar_to_tesla_w × elapsed_hours since last tick
@@ -66,9 +74,10 @@ class ActiveSession:
             self.solar_kwh += solar_to_tesla_w * elapsed_h / 1000.0
         self._last_tick_time = now
 
-        # Cap solar_kwh to never exceed total kwh_added
-        if self.kwh_added > 0:
-            self.solar_kwh = min(self.solar_kwh, self.kwh_added)
+        # Cap solar_kwh to never exceed total kwh_added (but never reduce it below
+        # its current value due to a temporary kwh_added dip from a counter reset)
+        if self.kwh_added > 0 and self.solar_kwh > self.kwh_added:
+            self.solar_kwh = self.kwh_added
 
         # Solar subsidy percentage
         if self.kwh_added > 0:
@@ -120,6 +129,8 @@ class SessionTracker:
         db_session: dict | None,
         start_grid_kwh: float,
         electricity_rate: float,
+        recovered_kwh_added: float = 0.0,
+        recovered_solar_kwh: float = 0.0,
     ) -> None:
         """Recover an active session from the DB after backend restart.
 
@@ -127,6 +138,8 @@ class SessionTracker:
             db_session: The active session row from the DB.
             start_grid_kwh: The persisted consumeenergy value at session start.
             electricity_rate: Current electricity rate.
+            recovered_kwh_added: Pre-computed kWh added from snapshot reconstruction.
+            recovered_solar_kwh: Pre-computed solar kWh from snapshot reconstruction.
         """
         if not db_session or self._recovered:
             return
@@ -140,7 +153,17 @@ class SessionTracker:
             start_grid_kwh=start_grid_kwh,
             electricity_rate=electricity_rate,
             _last_tick_time=time.time(),
+            # Restore accumulated values so they survive restarts and counter resets.
+            # _kwh_added_offset holds energy from before the current Tesla counter segment.
+            _kwh_added_offset=recovered_kwh_added,
+            solar_kwh=recovered_solar_kwh,
         )
+        # Set kwh_added so API dict is correct immediately
+        if recovered_kwh_added > 0:
+            self.active.kwh_added = recovered_kwh_added
+            if recovered_solar_kwh > 0:
+                self.active.solar_pct = round((recovered_solar_kwh / recovered_kwh_added) * 100, 1)
+                self.active.saved_amount = round(recovered_solar_kwh * electricity_rate, 2)
         self._prev_plugged_in = True
 
     def tick(

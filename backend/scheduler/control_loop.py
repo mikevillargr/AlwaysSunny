@@ -35,6 +35,7 @@ from services.supabase_client import (
     start_session as db_start_session,
     end_session as db_end_session,
     get_active_session,
+    get_session_snapshots,
     upsert_user_setting,
 )
 
@@ -791,7 +792,48 @@ async def _control_tick(user_id: str) -> None:
                 # No persisted value — use current (grid_kwh will be 0 until next session)
                 start_grid_kwh = solax.consume_energy_kwh
                 logger.warning(f"[{state.user_id[:8]}] No persisted start_grid_kwh — using current value")
-            state.session_tracker.recover_from_db(db_active, start_grid_kwh, electricity_rate)
+
+            # Reconstruct kwh_added and solar_kwh from snapshots so recovery
+            # doesn't lose accumulated energy data (Tesla counter may have reset).
+            recovered_kwh = 0.0
+            recovered_solar = 0.0
+            try:
+                snaps = get_session_snapshots(user_id, db_active["started_at"], None)
+                if len(snaps) >= 2:
+                    from datetime import datetime as _dt
+                    for i in range(1, len(snaps)):
+                        prev_s, cur_s = snaps[i - 1], snaps[i]
+                        try:
+                            t0 = _dt.fromisoformat(prev_s["timestamp"].replace("Z", "+00:00"))
+                            t1 = _dt.fromisoformat(cur_s["timestamp"].replace("Z", "+00:00"))
+                            elapsed_h = (t1 - t0).total_seconds() / 3600.0
+                        except (ValueError, TypeError):
+                            continue
+                        if elapsed_h <= 0 or elapsed_h > 0.5:
+                            continue
+                        t_amps = cur_s.get("tesla_amps") or 0
+                        t_w = t_amps * 240.0
+                        if t_w <= 0:
+                            continue
+                        recovered_kwh += t_w * elapsed_h / 1000.0
+                        sol_w = cur_s.get("solar_w") or 0
+                        hh_w = cur_s.get("household_w") or 0
+                        home_w = max(0, hh_w - t_w)
+                        sol_avail = max(0, sol_w - home_w)
+                        recovered_solar += min(t_w, sol_avail) * elapsed_h / 1000.0
+                    recovered_solar = min(recovered_solar, recovered_kwh)
+                    logger.info(
+                        f"[{state.user_id[:8]}] Reconstructed from {len(snaps)} snapshots: "
+                        f"{recovered_kwh:.2f} kWh added, {recovered_solar:.2f} kWh solar"
+                    )
+            except Exception as e:
+                logger.warning(f"[{state.user_id[:8]}] Snapshot reconstruction failed: {e}")
+
+            state.session_tracker.recover_from_db(
+                db_active, start_grid_kwh, electricity_rate,
+                recovered_kwh_added=recovered_kwh,
+                recovered_solar_kwh=recovered_solar,
+            )
             logger.info(f"[{state.user_id[:8]}] Recovered session #{db_active['id']}, start_grid_kwh={start_grid_kwh:.2f}")
         else:
             state.session_tracker._recovered = True  # No DB session to recover

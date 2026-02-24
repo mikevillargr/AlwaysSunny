@@ -288,6 +288,118 @@ async def ollama_restart(
     }
 
 
+@router.post("/admin/recalculate-sessions")
+async def recalculate_sessions(
+    admin: dict = Depends(get_admin_user),
+):
+    """Recalculate solar subsidy for sessions with 0% solar but valid snapshots.
+
+    Uses snapshot data (solar_w, household_w, tesla_amps) to reconstruct
+    solar-to-Tesla watts per tick, then integrates over time to get solar_kwh.
+    Only fixes sessions where solar_pct is 0 or null but snapshots show charging.
+    """
+    from services.supabase_client import get_supabase_admin, get_session_snapshots
+
+    sb = get_supabase_admin()
+    user_id = admin["id"]
+
+    # Find sessions with 0% solar that might be corrupted
+    result = sb.table("sessions").select("*").eq("user_id", user_id).order("started_at", desc=True).limit(50).execute()
+    sessions = result.data or []
+
+    fixed = []
+    skipped = []
+
+    for sess in sessions:
+        solar_pct = sess.get("solar_pct") or 0
+        kwh_added = sess.get("kwh_added") or 0
+
+        # Only fix sessions where solar is 0 but charging happened
+        if solar_pct > 0 or kwh_added <= 0:
+            skipped.append({"id": sess["id"], "reason": "solar_pct > 0 or no kwh_added"})
+            continue
+
+        # Get snapshots for this session
+        started_at = sess["started_at"]
+        ended_at = sess.get("ended_at")
+        snapshots = get_session_snapshots(user_id, started_at, ended_at)
+
+        if len(snapshots) < 2:
+            skipped.append({"id": sess["id"], "reason": f"only {len(snapshots)} snapshots"})
+            continue
+
+        # Reconstruct solar_kwh from snapshots using proportional allocation
+        # Same logic as _calc_solar_to_tesla_w in control_loop.py
+        total_solar_kwh = 0.0
+        has_home_battery = False  # conservative — assume no battery for reconstruction
+
+        for i in range(1, len(snapshots)):
+            prev_snap = snapshots[i - 1]
+            snap = snapshots[i]
+
+            # Time delta between snapshots
+            from datetime import datetime as dt
+            try:
+                t_prev = dt.fromisoformat(prev_snap["timestamp"].replace("Z", "+00:00"))
+                t_curr = dt.fromisoformat(snap["timestamp"].replace("Z", "+00:00"))
+                elapsed_h = (t_curr - t_prev).total_seconds() / 3600.0
+            except (ValueError, TypeError):
+                continue
+
+            if elapsed_h <= 0 or elapsed_h > 0.5:  # skip gaps > 30 min
+                continue
+
+            solar_w = snap.get("solar_w") or 0
+            household_w = snap.get("household_w") or 0
+            tesla_amps = snap.get("tesla_amps") or 0
+            tesla_w = tesla_amps * 240.0
+
+            if tesla_w <= 0:
+                continue
+
+            # Proportional allocation: solar share of Tesla charging
+            # solar_to_tesla = min(tesla_w, max(0, solar_w - home_only_w))
+            home_only_w = max(0, household_w - tesla_w)
+            solar_available_for_tesla = max(0, solar_w - home_only_w)
+            solar_to_tesla_w = min(tesla_w, solar_available_for_tesla)
+
+            total_solar_kwh += solar_to_tesla_w * elapsed_h / 1000.0
+
+        if total_solar_kwh <= 0:
+            skipped.append({"id": sess["id"], "reason": "reconstructed solar_kwh is 0"})
+            continue
+
+        # Cap solar_kwh to kwh_added
+        total_solar_kwh = min(total_solar_kwh, kwh_added)
+        new_solar_pct = round((total_solar_kwh / kwh_added) * 100, 1)
+        electricity_rate = sess.get("electricity_rate") or 10.83
+        new_saved = round(total_solar_kwh * electricity_rate, 2)
+
+        # Update the session
+        sb.table("sessions").update({
+            "solar_kwh": round(total_solar_kwh, 2),
+            "solar_pct": new_solar_pct,
+            "saved_amount": new_saved,
+        }).eq("id", sess["id"]).execute()
+
+        fixed.append({
+            "id": sess["id"],
+            "started_at": started_at,
+            "snapshots_used": len(snapshots),
+            "solar_kwh": round(total_solar_kwh, 2),
+            "solar_pct": new_solar_pct,
+            "saved_amount": new_saved,
+            "kwh_added": kwh_added,
+        })
+
+    return {
+        "fixed": len(fixed),
+        "skipped": len(skipped),
+        "details": fixed,
+        "skipped_details": skipped[:10],  # limit output
+    }
+
+
 @router.get("/admin/check")
 async def check_admin(
     admin: dict = Depends(get_admin_user),
