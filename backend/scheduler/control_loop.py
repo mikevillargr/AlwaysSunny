@@ -294,7 +294,6 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
         )
 
         # Apply admin AI sensitivity settings if configured
-        ai_model = state.settings.get("ai_model") or None
         ai_temp = state.settings.get("ai_temperature")
         ai_tokens = state.settings.get("ai_max_tokens")
         ai_retries = state.settings.get("ai_retry_attempts")
@@ -309,7 +308,6 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
                     prompt,
                     trigger_reason,
                     max_retries=int(ai_retries) if ai_retries else 3,
-                    model_override=ai_model,
                     temperature_override=float(ai_temp) if ai_temp else None,
                     max_tokens_override=int(ai_tokens) if ai_tokens else None,
                     user_settings=state.settings,

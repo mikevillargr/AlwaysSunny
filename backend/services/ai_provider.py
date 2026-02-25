@@ -87,11 +87,14 @@ async def _generate_openai(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    messages = [{"role": "user", "content": prompt}]
+    if format_json:
+        messages.insert(0, {"role": "system", "content": "Respond only in valid JSON."})
     payload: dict = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens,
+        "max_completion_tokens": max_tokens,
     }
     if format_json:
         payload["response_format"] = {"type": "json_object"}

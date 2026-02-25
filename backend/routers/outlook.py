@@ -125,11 +125,9 @@ async def generate_outlook(state) -> tuple[str, str, str]:
         return "No forecast data available yet.", "", ""
 
     try:
-        ai_model = state.settings.get("ai_model") or None
         raw_text, model_id = await call_ollama_text(
             prompt,
             max_retries=1,  # Don't retry — outlook is informational, not critical
-            model_override=ai_model,
             max_tokens_override=200,
             user_settings=state.settings,
         )
