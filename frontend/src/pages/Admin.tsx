@@ -14,7 +14,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material'
-import { Bot, Play, Shuffle, Sun, Cloud, Car, Wallet, Save, AlertTriangle, FileText, Edit3, Zap } from 'lucide-react'
+import { Bot, Play, Shuffle, Sun, Cloud, Car, Wallet, Save, AlertTriangle, FileText, Edit3, Zap, Key } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
 // --- Types ---
@@ -180,6 +180,17 @@ export function Admin() {
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsMsg, setSettingsMsg] = useState('')
 
+  // AI Provider BYOK
+  const [aiProvider, setAiProvider] = useState('ollama')
+  const [aiPrimaryModel, setAiPrimaryModel] = useState('')
+  const [aiFallbackModel, setAiFallbackModel] = useState('')
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [anthropicKey, setAnthropicKey] = useState('')
+  const [openaiKeySet, setOpenaiKeySet] = useState(false)
+  const [anthropicKeySet, setAnthropicKeySet] = useState(false)
+  const [providerSaving, setProviderSaving] = useState(false)
+  const [providerMsg, setProviderMsg] = useState('')
+
   // Load AI settings on mount
   useEffect(() => {
     ;(async () => {
@@ -195,6 +206,56 @@ export function Admin() {
       }
     })()
   }, [])
+
+  // Load provider settings
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const resp = await apiFetch('/api/settings')
+        if (resp.ok) {
+          const data = await resp.json()
+          setAiProvider(data.ai_provider || 'ollama')
+          setAiPrimaryModel(data.ai_primary_model || '')
+          setAiFallbackModel(data.ai_fallback_model || '')
+          setOpenaiKeySet(data.openai_api_key_set || false)
+          setAnthropicKeySet(data.anthropic_api_key_set || false)
+        }
+      } catch { /* ignore */ }
+    })()
+  }, [])
+
+  const saveProviderSettings = useCallback(async () => {
+    setProviderSaving(true)
+    setProviderMsg('')
+    try {
+      const updates: Record<string, string> = {
+        ai_provider: aiProvider,
+        ai_primary_model: aiPrimaryModel,
+        ai_fallback_model: aiFallbackModel,
+      }
+      if (openaiKey) updates.openai_api_key = openaiKey
+      if (anthropicKey) updates.anthropic_api_key = anthropicKey
+      const resp = await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify(updates),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        setOpenaiKeySet(data.openai_api_key_set || false)
+        setAnthropicKeySet(data.anthropic_api_key_set || false)
+        setOpenaiKey('')
+        setAnthropicKey('')
+        setProviderMsg('Saved')
+        setTimeout(() => setProviderMsg(''), 3000)
+      } else {
+        setProviderMsg('Failed to save')
+      }
+    } catch {
+      setProviderMsg('Failed to save')
+    } finally {
+      setProviderSaving(false)
+    }
+  }, [aiProvider, aiPrimaryModel, aiFallbackModel, openaiKey, anthropicKey])
 
   const saveSettings = useCallback(async () => {
     if (!aiSettings) return
@@ -330,6 +391,151 @@ export function Admin() {
       <Typography variant="body2" color="text.disabled" sx={{ mb: 3 }}>
         Test the AI pipeline with mock data and tune sensitivity settings.
       </Typography>
+
+      {/* === AI Provider Configuration === */}
+      <Card sx={{ p: 2.5, mb: 3, border: '1px solid rgba(59,130,246,0.2)' }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ textTransform: 'uppercase', letterSpacing: 1, display: 'block', mb: 0.5 }}
+        >
+          AI Provider
+        </Typography>
+        <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
+          Choose between local Ollama or bring your own API key for OpenAI / Anthropic.
+        </Typography>
+
+        {/* Provider selector pills */}
+        <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
+          {[
+            { key: 'ollama', label: 'Ollama (Local)', color: '#a855f7' },
+            { key: 'openai', label: 'OpenAI', color: '#10b981' },
+            { key: 'anthropic', label: 'Anthropic', color: '#f59e0b' },
+          ].map(({ key, label, color }) => {
+            const active = aiProvider === key
+            return (
+              <Box
+                key={key}
+                onClick={() => setAiProvider(key)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75,
+                  px: 2, py: 0.75, borderRadius: '20px', cursor: 'pointer',
+                  border: active ? `1px solid ${color}` : '1px solid #2a3f57',
+                  backgroundColor: active ? `${color}15` : 'transparent',
+                  color: active ? color : '#4a6382',
+                  transition: 'all 0.18s ease', userSelect: 'none',
+                  '&:hover': { borderColor: color, color: color },
+                }}
+              >
+                <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: active ? 600 : 400, color: 'inherit' }}>
+                  {label}
+                </Typography>
+              </Box>
+            )
+          })}
+        </Box>
+
+        {/* Model configuration */}
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={6}>
+            <TextField
+              label="Primary Model"
+              value={aiPrimaryModel}
+              onChange={(e) => setAiPrimaryModel(e.target.value)}
+              size="small"
+              fullWidth
+              placeholder={aiProvider === 'ollama' ? 'qwen2.5:7b' : aiProvider === 'openai' ? 'gpt-4o-mini' : 'claude-3-5-haiku-20241022'}
+              helperText="Leave blank for default"
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              label="Fallback Model"
+              value={aiFallbackModel}
+              onChange={(e) => setAiFallbackModel(e.target.value)}
+              size="small"
+              fullWidth
+              placeholder={aiProvider === 'ollama' ? 'qwen2.5:1.5b' : aiProvider === 'openai' ? 'gpt-4o-mini' : 'claude-3-5-haiku-20241022'}
+              helperText="Used when primary fails"
+            />
+          </Grid>
+        </Grid>
+
+        {/* API Keys — only shown for cloud providers */}
+        {aiProvider !== 'ollama' && (
+          <>
+            <Divider sx={{ my: 2, borderColor: '#1a2a3d' }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Key size={14} color="#f59e0b" />
+              <Typography variant="caption" color="#f59e0b" sx={{ fontWeight: 600 }}>
+                API Keys
+              </Typography>
+            </Box>
+            <Grid container spacing={2}>
+              {aiProvider === 'openai' && (
+                <Grid item xs={12}>
+                  <TextField
+                    label="OpenAI API Key"
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    size="small"
+                    fullWidth
+                    type="password"
+                    placeholder={openaiKeySet ? '••••••••  (key is set)' : 'sk-...'}
+                    helperText={openaiKeySet ? 'Key is saved. Enter a new one to replace it.' : 'Required for OpenAI models.'}
+                    InputProps={{
+                      endAdornment: openaiKeySet ? (
+                        <InputAdornment position="end">
+                          <Chip label="Set" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.65rem' }} />
+                        </InputAdornment>
+                      ) : undefined,
+                    }}
+                  />
+                </Grid>
+              )}
+              {aiProvider === 'anthropic' && (
+                <Grid item xs={12}>
+                  <TextField
+                    label="Anthropic API Key"
+                    value={anthropicKey}
+                    onChange={(e) => setAnthropicKey(e.target.value)}
+                    size="small"
+                    fullWidth
+                    type="password"
+                    placeholder={anthropicKeySet ? '••••••••  (key is set)' : 'sk-ant-...'}
+                    helperText={anthropicKeySet ? 'Key is saved. Enter a new one to replace it.' : 'Required for Anthropic models.'}
+                    InputProps={{
+                      endAdornment: anthropicKeySet ? (
+                        <InputAdornment position="end">
+                          <Chip label="Set" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.65rem' }} />
+                        </InputAdornment>
+                      ) : undefined,
+                    }}
+                  />
+                </Grid>
+              )}
+            </Grid>
+          </>
+        )}
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<Save size={14} />}
+            onClick={saveProviderSettings}
+            disabled={providerSaving}
+            sx={{ bgcolor: '#3b82f6', '&:hover': { bgcolor: '#2563eb' }, textTransform: 'none' }}
+          >
+            {providerSaving ? 'Saving...' : 'Save Provider'}
+          </Button>
+          {providerMsg && (
+            <Typography variant="caption" color={providerMsg === 'Saved' ? '#22c55e' : '#ef4444'}>
+              {providerMsg}
+            </Typography>
+          )}
+        </Box>
+      </Card>
 
       {/* === AI Sensitivity Settings === */}
       <Card sx={{ p: 2.5, mb: 3, border: '1px solid rgba(168,85,247,0.2)' }}>

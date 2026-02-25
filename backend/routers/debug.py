@@ -125,7 +125,10 @@ async def ai_pipeline_test(
     # 2. Call Ollama
     start = time.time()
     try:
-        recommendation = await call_ollama(prompt, trigger_reason="manual_test")
+        # Get user settings for AI provider routing
+        from services.supabase_client import get_user_settings
+        u_settings = get_user_settings(admin["id"])
+        recommendation = await call_ollama(prompt, trigger_reason="manual_test", user_settings=u_settings)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()

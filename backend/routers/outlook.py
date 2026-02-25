@@ -131,6 +131,7 @@ async def generate_outlook(state) -> tuple[str, str]:
             max_retries=1,  # Don't retry — outlook is informational, not critical
             model_override=ai_model,
             max_tokens_override=200,
+            user_settings=state.settings,
         )
         # Extra cleanup: strip any JSON artifacts the model might still produce
         import json

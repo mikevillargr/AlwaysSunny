@@ -308,6 +308,7 @@ async def _maybe_call_ai(state: UserLoopState, trigger_reason: str) -> None:
                     model_override=ai_model,
                     temperature_override=float(ai_temp) if ai_temp else None,
                     max_tokens_override=int(ai_tokens) if ai_tokens else None,
+                    user_settings=state.settings,
                 )
 
                 # Apply admin amp clamps if configured
