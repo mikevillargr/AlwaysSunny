@@ -403,6 +403,264 @@ async def recalculate_sessions(
     }
 
 
+@router.get("/admin/ai-models")
+async def list_ai_models(
+    provider: str = "ollama",
+    admin: dict = Depends(get_admin_user),
+):
+    """List available AI models for a given provider.
+
+    - ollama: queries the local Ollama instance for installed models
+    - openai: returns a curated list of popular models
+    - anthropic: returns a curated list of popular models
+    """
+    if provider == "ollama":
+        import httpx
+        settings = get_settings()
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"{settings.ollama_host}/api/tags")
+                resp.raise_for_status()
+                models = resp.json().get("models", [])
+                return {
+                    "provider": "ollama",
+                    "models": [
+                        {
+                            "id": m.get("name", ""),
+                            "name": m.get("name", ""),
+                            "size": m.get("size", 0),
+                        }
+                        for m in models
+                    ],
+                }
+        except Exception as e:
+            return {"provider": "ollama", "models": [], "error": str(e)}
+
+    elif provider == "openai":
+        return {
+            "provider": "openai",
+            "models": [
+                {"id": "gpt-4o", "name": "GPT-4o"},
+                {"id": "gpt-4o-mini", "name": "GPT-4o Mini"},
+                {"id": "gpt-4-turbo", "name": "GPT-4 Turbo"},
+                {"id": "gpt-4", "name": "GPT-4"},
+                {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"},
+                {"id": "o1", "name": "o1"},
+                {"id": "o1-mini", "name": "o1 Mini"},
+                {"id": "o3-mini", "name": "o3 Mini"},
+            ],
+        }
+
+    elif provider == "anthropic":
+        return {
+            "provider": "anthropic",
+            "models": [
+                {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
+                {"id": "claude-3-7-sonnet-20250219", "name": "Claude 3.7 Sonnet"},
+                {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
+                {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku"},
+                {"id": "claude-3-haiku-20240307", "name": "Claude 3 Haiku"},
+                {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus"},
+            ],
+        }
+
+    return {"provider": provider, "models": [], "error": f"Unknown provider: {provider}"}
+
+
+@router.get("/admin/tessie-charges")
+async def get_tessie_charges(
+    days: int = 30,
+    admin: dict = Depends(get_admin_user),
+):
+    """Fetch charge history from Tessie and compare with local DB sessions.
+
+    Returns Tessie charges, DB sessions, and identified gaps (charges in Tessie
+    that have no matching session in our DB).
+    """
+    import httpx
+    from datetime import datetime, timezone, timedelta
+    from services.supabase_client import get_supabase_admin, get_user_credentials
+
+    user_id = admin["id"]
+    creds = get_user_credentials(user_id)
+    if not creds:
+        raise HTTPException(status_code=400, detail="No Tessie credentials configured")
+    api_key = creds.get("tessie_api_key", "")
+    vin = creds.get("tessie_vin", "")
+    if not api_key or not vin:
+        raise HTTPException(status_code=400, detail="Tessie API key or VIN not set")
+
+    # Fetch Tessie charges
+    now = int(time.time())
+    start = now - days * 86400
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://api.tessie.com/{vin}/charges",
+                headers={"Authorization": f"Bearer {api_key}"},
+                params={"from": start, "to": now, "distance_format": "km", "format": "json"},
+            )
+            resp.raise_for_status()
+            tessie_charges = resp.json().get("results", [])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Tessie API error: {e}")
+
+    # Fetch DB sessions
+    sb = get_supabase_admin()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    db_result = sb.table("sessions").select("*").eq("user_id", user_id).gte("started_at", cutoff).order("started_at", desc=True).execute()
+    db_sessions = db_result.data or []
+
+    # Compare: for each Tessie charge, check if there's a matching DB session
+    # (within 10 min of start time and similar kWh)
+    gaps = []
+    matched = []
+    for tc in tessie_charges:
+        tc_start = datetime.fromtimestamp(tc["started_at"], tz=timezone.utc)
+        tc_end = datetime.fromtimestamp(tc["ended_at"], tz=timezone.utc) if tc.get("ended_at") else None
+        tc_kwh = tc.get("energy_added", 0)
+
+        found_match = False
+        for ds in db_sessions:
+            ds_start = datetime.fromisoformat(ds["started_at"])
+            diff_mins = abs((tc_start - ds_start).total_seconds()) / 60
+            if diff_mins < 10:
+                found_match = True
+                matched.append({
+                    "tessie_id": tc["id"],
+                    "db_id": ds["id"],
+                    "tessie_kwh": tc_kwh,
+                    "db_kwh": ds.get("kwh_added", 0),
+                    "start_diff_mins": round(diff_mins, 1),
+                })
+                break
+
+        if not found_match and tc_kwh >= 0.5:  # Ignore trivial charges
+            gaps.append({
+                "tessie_id": tc["id"],
+                "started_at": tc_start.isoformat(),
+                "ended_at": tc_end.isoformat() if tc_end else None,
+                "kwh_added": tc_kwh,
+                "start_soc": tc.get("starting_battery", 0),
+                "end_soc": tc.get("ending_battery", 0),
+                "location": tc.get("location", ""),
+                "duration_mins": round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else None,
+            })
+
+    return {
+        "tessie_total": len(tessie_charges),
+        "db_total": len(db_sessions),
+        "matched": len(matched),
+        "gaps": gaps,
+        "matches": matched,
+    }
+
+
+@router.post("/admin/backfill-from-tessie")
+async def backfill_from_tessie(
+    admin: dict = Depends(get_admin_user),
+    days: int = 30,
+):
+    """Backfill missing sessions from Tessie charge history.
+
+    Fetches Tessie charges, identifies gaps vs local DB, and creates
+    session records for charges that were missed by the session tracker.
+    """
+    import httpx
+    from datetime import datetime, timezone, timedelta
+    from services.supabase_client import get_supabase_admin, get_user_credentials, get_user_settings as _get_settings
+
+    user_id = admin["id"]
+    creds = get_user_credentials(user_id)
+    if not creds:
+        raise HTTPException(status_code=400, detail="No Tessie credentials configured")
+    api_key = creds.get("tessie_api_key", "")
+    vin = creds.get("tessie_vin", "")
+    if not api_key or not vin:
+        raise HTTPException(status_code=400, detail="Tessie API key or VIN not set")
+
+    settings = _get_settings(user_id)
+    electricity_rate = float(settings.get("electricity_rate", "10.83"))
+
+    # Fetch Tessie charges
+    now = int(time.time())
+    start = now - days * 86400
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://api.tessie.com/{vin}/charges",
+                headers={"Authorization": f"Bearer {api_key}"},
+                params={"from": start, "to": now, "distance_format": "km", "format": "json"},
+            )
+            resp.raise_for_status()
+            tessie_charges = resp.json().get("results", [])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Tessie API error: {e}")
+
+    # Fetch existing DB sessions
+    sb = get_supabase_admin()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    db_result = sb.table("sessions").select("id,started_at").eq("user_id", user_id).gte("started_at", cutoff).execute()
+    db_sessions = db_result.data or []
+    db_starts = [datetime.fromisoformat(ds["started_at"]) for ds in db_sessions]
+
+    backfilled = []
+    skipped = []
+
+    for tc in tessie_charges:
+        tc_start = datetime.fromtimestamp(tc["started_at"], tz=timezone.utc)
+        tc_end = datetime.fromtimestamp(tc["ended_at"], tz=timezone.utc) if tc.get("ended_at") else None
+        tc_kwh = tc.get("energy_added", 0)
+
+        # Skip trivial charges
+        if tc_kwh < 0.5:
+            skipped.append({"tessie_id": tc["id"], "reason": f"trivial ({tc_kwh} kWh)"})
+            continue
+
+        # Check if already in DB
+        has_match = any(abs((tc_start - ds).total_seconds()) < 600 for ds in db_starts)
+        if has_match:
+            skipped.append({"tessie_id": tc["id"], "reason": "already in DB"})
+            continue
+
+        # Create session record from Tessie data
+        duration_mins = round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else 0
+        session_data = {
+            "user_id": user_id,
+            "started_at": tc_start.isoformat(),
+            "ended_at": tc_end.isoformat() if tc_end else None,
+            "duration_mins": duration_mins,
+            "kwh_added": round(tc_kwh, 2),
+            "start_soc": tc.get("starting_battery", 0),
+            "end_soc": tc.get("ending_battery", 0),
+            "target_soc": tc.get("ending_battery", 80),
+            "electricity_rate": electricity_rate,
+            # Solar data unavailable from Tessie — mark as backfilled
+            "solar_kwh": 0,
+            "solar_pct": 0,
+            "grid_kwh": 0,
+            "saved_amount": 0,
+            "subsidy_calculation_method": "tessie_backfill",
+        }
+        try:
+            sb.table("sessions").insert(session_data).execute()
+            backfilled.append({
+                "tessie_id": tc["id"],
+                "started_at": tc_start.isoformat(),
+                "kwh_added": tc_kwh,
+                "soc": f"{tc.get('starting_battery',0)} → {tc.get('ending_battery',0)}",
+            })
+        except Exception as e:
+            skipped.append({"tessie_id": tc["id"], "reason": f"insert error: {e}"})
+
+    return {
+        "backfilled": len(backfilled),
+        "skipped": len(skipped),
+        "details": backfilled,
+        "skipped_details": skipped[:10],
+    }
+
+
 @router.get("/admin/check")
 async def check_admin(
     admin: dict = Depends(get_admin_user),

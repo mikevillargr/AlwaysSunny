@@ -190,6 +190,8 @@ export function Admin() {
   const [anthropicKeySet, setAnthropicKeySet] = useState(false)
   const [providerSaving, setProviderSaving] = useState(false)
   const [providerMsg, setProviderMsg] = useState('')
+  const [availableModels, setAvailableModels] = useState<{id: string; name: string}[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
 
   // Load AI settings on mount
   useEffect(() => {
@@ -223,6 +225,21 @@ export function Admin() {
       } catch { /* ignore */ }
     })()
   }, [])
+
+  // Fetch available models when provider changes
+  useEffect(() => {
+    ;(async () => {
+      setModelsLoading(true)
+      try {
+        const resp = await apiFetch(`/api/admin/ai-models?provider=${aiProvider}`)
+        if (resp.ok) {
+          const data = await resp.json()
+          setAvailableModels(data.models || [])
+        }
+      } catch { /* ignore */ }
+      setModelsLoading(false)
+    })()
+  }, [aiProvider])
 
   const saveProviderSettings = useCallback(async () => {
     setProviderSaving(true)
@@ -438,26 +455,58 @@ export function Admin() {
         {/* Model configuration */}
         <Grid container spacing={2} sx={{ mb: 2 }}>
           <Grid item xs={6}>
-            <TextField
-              label="Primary Model"
-              value={aiPrimaryModel}
-              onChange={(e) => setAiPrimaryModel(e.target.value)}
-              size="small"
-              fullWidth
-              placeholder={aiProvider === 'ollama' ? 'qwen2.5:7b' : aiProvider === 'openai' ? 'gpt-4o-mini' : 'claude-3-5-haiku-20241022'}
-              helperText="Leave blank for default"
-            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              Primary Model
+            </Typography>
+            {modelsLoading ? (
+              <CircularProgress size={18} sx={{ color: '#3b82f6' }} />
+            ) : (
+              <Select
+                value={aiPrimaryModel}
+                onChange={(e) => setAiPrimaryModel(e.target.value)}
+                size="small"
+                fullWidth
+                displayEmpty
+                sx={{ '& .MuiSelect-select': { fontSize: '0.85rem' } }}
+              >
+                <MenuItem value="">
+                  <em>Default</em>
+                </MenuItem>
+                {availableModels.map((m) => (
+                  <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
+                ))}
+              </Select>
+            )}
+            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
+              Main model for AI decisions
+            </Typography>
           </Grid>
           <Grid item xs={6}>
-            <TextField
-              label="Fallback Model"
-              value={aiFallbackModel}
-              onChange={(e) => setAiFallbackModel(e.target.value)}
-              size="small"
-              fullWidth
-              placeholder={aiProvider === 'ollama' ? 'qwen2.5:1.5b' : aiProvider === 'openai' ? 'gpt-4o-mini' : 'claude-3-5-haiku-20241022'}
-              helperText="Used when primary fails"
-            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              Fallback Model
+            </Typography>
+            {modelsLoading ? (
+              <CircularProgress size={18} sx={{ color: '#3b82f6' }} />
+            ) : (
+              <Select
+                value={aiFallbackModel}
+                onChange={(e) => setAiFallbackModel(e.target.value)}
+                size="small"
+                fullWidth
+                displayEmpty
+                sx={{ '& .MuiSelect-select': { fontSize: '0.85rem' } }}
+              >
+                <MenuItem value="">
+                  <em>Default</em>
+                </MenuItem>
+                {availableModels.map((m) => (
+                  <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
+                ))}
+              </Select>
+            )}
+            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
+              Used when primary fails
+            </Typography>
           </Grid>
         </Grid>
 
