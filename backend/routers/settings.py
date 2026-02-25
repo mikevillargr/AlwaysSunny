@@ -6,9 +6,19 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 
+import logging
+
 from middleware.auth import get_current_user
 from models.database import SettingsUpdate, SettingsResponse
 from services.supabase_client import get_user_settings, upsert_user_setting
+
+logger = logging.getLogger(__name__)
+
+# Settings that should trigger an immediate AI re-evaluation
+AI_TRIGGER_SETTINGS = {
+    "departure_time", "charging_strategy", "daily_grid_budget_kwh",
+    "max_grid_import_w", "target_soc",
+}
 
 router = APIRouter()
 
@@ -107,6 +117,22 @@ async def update_settings(
         # Track when electricity_rate was last updated
         if field == "electricity_rate":
             upsert_user_setting(user_id, "electricity_rate_updated_at", now)
+
+    # If any AI-relevant setting changed, force an immediate AI re-evaluation
+    # by resetting last_ai_call so the next control loop tick triggers AI.
+    changed_fields = set(updates.model_dump(exclude_none=True).keys())
+    if changed_fields & AI_TRIGGER_SETTINGS:
+        try:
+            from scheduler.control_loop import get_user_state
+            state = get_user_state(user_id)
+            if state and state.ai_enabled:
+                state.last_ai_call = 0
+                logger.info(
+                    f"[{user_id[:8]}] AI re-eval triggered by settings change: "
+                    f"{changed_fields & AI_TRIGGER_SETTINGS}"
+                )
+        except Exception as e:
+            logger.warning(f"[{user_id[:8]}] Failed to trigger AI re-eval: {e}")
 
     # Return full updated settings
     raw = get_user_settings(user_id)

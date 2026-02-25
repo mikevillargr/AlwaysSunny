@@ -122,6 +122,7 @@ class SessionTracker:
     def __init__(self):
         self.active: ActiveSession | None = None
         self._prev_plugged_in: bool = False
+        self._prev_charging_state: str = ""  # track Charging/Stopped/Complete transitions
         self._recovered: bool = False
 
     def recover_from_db(
@@ -165,6 +166,7 @@ class SessionTracker:
                 self.active.solar_pct = round((recovered_solar_kwh / recovered_kwh_added) * 100, 1)
                 self.active.saved_amount = round(recovered_solar_kwh * electricity_rate, 2)
         self._prev_plugged_in = True
+        self._prev_charging_state = "Charging"
 
     def tick(
         self,
@@ -185,9 +187,18 @@ class SessionTracker:
         event: "started" | "updated" | "ended" | None
         data: session dict for DB write (on "ended") or API response (on "updated")
         """
-        # Detect session start: transition from unplugged to plugged at home
+        # Detect session start:
+        # 1. Transition from unplugged to plugged at home, OR
+        # 2. Car stays plugged but transitions to "Charging" from a non-charging state
+        #    (e.g., Complete/Stopped → Charging when a new charge begins next day)
         # Guard: never start a new session if one is already active
-        if plugged_in and at_home and not self._prev_plugged_in and self.active is None:
+        is_new_plug = plugged_in and at_home and not self._prev_plugged_in
+        is_new_charge = (
+            plugged_in and at_home
+            and charging_state == "Charging"
+            and self._prev_charging_state not in ("", "Charging")
+        )
+        if (is_new_plug or is_new_charge) and self.active is None:
             now = time.time()
             self.active = ActiveSession(
                 user_id=user_id,
@@ -200,6 +211,7 @@ class SessionTracker:
                 _last_tick_time=now,
             )
             self._prev_plugged_in = True
+            self._prev_charging_state = charging_state
             return "started", {
                 "user_id": user_id,
                 "started_at": datetime.now(timezone.utc).isoformat(),
@@ -226,13 +238,16 @@ class SessionTracker:
                 db_id = self.active.db_session_id
                 self.active = None
                 self._prev_plugged_in = plugged_in
+                self._prev_charging_state = charging_state
                 return "ended", {"db_session_id": db_id, **final_data}
 
             # Session still active — update stats and keep rate current
             self.active.electricity_rate = electricity_rate
             self.active.update(consume_energy_kwh, tesla_soc, charge_energy_added, solar_to_tesla_w)
             self._prev_plugged_in = plugged_in
+            self._prev_charging_state = charging_state
             return "updated", self.active.to_api_dict()
 
         self._prev_plugged_in = plugged_in
+        self._prev_charging_state = charging_state
         return None, None
