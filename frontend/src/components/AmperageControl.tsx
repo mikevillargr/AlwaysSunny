@@ -34,16 +34,21 @@ export function AmperageControl({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Priority for display value:
-  // 1. When system has sent a command (lastAmpsSent >= 0): show what we commanded
-  //    This is the ground truth — Tesla may lag behind or throttle, but this is what we told it.
-  // 2. Otherwise: show Tesla's actual current draw
+  // 1. AI active with fresh recommendation: show AI target immediately (optimistic)
+  // 2. When system has sent a command (lastAmpsSent >= 0): show what we commanded
+  // 3. Otherwise: show Tesla's actual current draw
   useEffect(() => {
-    if (lastAmpsSent >= 0) {
+    if (autoOptimize && aiRecommendedAmps > 0) {
+      setLocalAmps(aiRecommendedAmps)
+    } else if (lastAmpsSent >= 0) {
       setLocalAmps(lastAmpsSent)
     } else {
       setLocalAmps(teslaChargingAmps)
     }
-  }, [teslaChargingAmps, lastAmpsSent])
+  }, [teslaChargingAmps, lastAmpsSent, autoOptimize, aiRecommendedAmps])
+
+  // Whether the AI target is pending (sent but Tesla hasn't matched yet)
+  const aiPending = autoOptimize && aiRecommendedAmps > 0 && aiRecommendedAmps !== teslaChargingAmps
 
   const handleSliderChange = (_: unknown, val: number | number[]) => {
     setLocalAmps(val as number)
@@ -172,11 +177,13 @@ export function AmperageControl({
               ? 'Tessie disconnected'
               : teslaThrottled
                 ? `Commanded ${teslaChargeCurrentRequest}A · Tesla drawing ${teslaChargingAmps}A (BMS throttle at ${teslaSoc}% SoC)`
-                : lastAmpsSent >= 0 && lastAmpsSent !== teslaChargingAmps
-                  ? `Commanded ${lastAmpsSent}A · Tesla drawing ${teslaChargingAmps}A`
-                  : autoOptimize
-                    ? 'Managed by AI optimizer'
-                    : `${teslaAmperage * 230}W charging rate`}
+                : aiPending
+                  ? `Sending ${aiRecommendedAmps}A to Tesla · currently ${teslaChargingAmps}A`
+                  : lastAmpsSent >= 0 && lastAmpsSent !== teslaChargingAmps
+                    ? `Commanded ${lastAmpsSent}A · Tesla drawing ${teslaChargingAmps}A`
+                    : autoOptimize
+                      ? 'Managed by AI optimizer'
+                      : `${teslaAmperage * 230}W charging rate`}
           </Typography>
         </Box>
 
