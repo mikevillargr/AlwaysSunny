@@ -81,6 +81,7 @@ class UserLoopState:
     # Charging outlook (AI-generated narrative, refreshed hourly)
     outlook_text: str = ""
     outlook_generated_at: str = ""
+    outlook_model: str = ""
     last_outlook_fetch: float = 0
 
     # Tessie charge history reconciliation (daily)
@@ -1071,6 +1072,7 @@ def build_status_response(state: UserLoopState) -> dict:
         "ai_confidence": ai.confidence if ai and ai.is_fresh else "low",
         "ai_trigger_reason": ai.trigger_reason if ai and ai.is_fresh else "scheduled",
         "ai_last_updated_secs": ai.age_secs if ai else 0,
+        "ai_model_used": ai.model_used if ai and ai.is_fresh else "",
         "session": session.to_api_dict() if session else None,
         "forecast": forecast.to_api_response(timezone=state.settings.get("timezone", "Asia/Manila")) if forecast else {
             "sunrise": "", "sunset": "", "peak_window_start": "",

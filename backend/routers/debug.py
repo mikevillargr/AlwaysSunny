@@ -661,6 +661,28 @@ async def backfill_from_tessie(
     }
 
 
+@router.post("/admin/verify-api-key")
+async def verify_api_key_endpoint(
+    body: dict,
+    admin: dict = Depends(get_admin_user),
+):
+    """Verify an OpenAI or Anthropic API key.
+
+    Body: {"provider": "openai"|"anthropic", "api_key": "sk-..."}
+    Returns: {"valid": bool, "detail": str}
+    """
+    provider = body.get("provider", "")
+    api_key = body.get("api_key", "")
+    if not provider or not api_key:
+        return {"valid": False, "detail": "Provider and API key required"}
+    if provider not in ("openai", "anthropic"):
+        return {"valid": False, "detail": f"Unknown provider: {provider}"}
+
+    from services.ai_provider import verify_api_key
+    valid, detail = await verify_api_key(provider, api_key)
+    return {"valid": valid, "detail": detail}
+
+
 @router.get("/admin/check")
 async def check_admin(
     admin: dict = Depends(get_admin_user),

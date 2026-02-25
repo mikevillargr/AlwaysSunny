@@ -138,6 +138,18 @@ def get_sessions(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
     return result.data
 
 
+def get_sessions_count(user_id: str) -> int:
+    """Get total session count for a user."""
+    sb = get_supabase_admin()
+    result = (
+        sb.table("sessions")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return result.count or 0
+
+
 def get_active_session(user_id: str) -> dict | None:
     """Get the currently active session (ended_at is null)."""
     sb = get_supabase_admin()

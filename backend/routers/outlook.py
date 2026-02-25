@@ -118,15 +118,15 @@ RULES:
 - 2-3 sentences max. Plain conversational English. NO JSON, NO code, NO brackets, NO formatting."""
 
 
-async def generate_outlook(state) -> tuple[str, str]:
-    """Generate the outlook text via Ollama plain text call. Returns (text, generated_at)."""
+async def generate_outlook(state) -> tuple[str, str, str]:
+    """Generate the outlook text via AI. Returns (text, generated_at, model_id)."""
     prompt = _build_outlook_prompt(state)
     if not prompt:
-        return "No forecast data available yet.", ""
+        return "No forecast data available yet.", "", ""
 
     try:
         ai_model = state.settings.get("ai_model") or None
-        raw_text = await call_ollama_text(
+        raw_text, model_id = await call_ollama_text(
             prompt,
             max_retries=1,  # Don't retry — outlook is informational, not critical
             model_override=ai_model,
@@ -164,10 +164,10 @@ async def generate_outlook(state) -> tuple[str, str]:
             generated_at = datetime.now(ZoneInfo(user_tz)).strftime("%H:%M")
         except Exception:
             generated_at = datetime.now().strftime("%H:%M")
-        return raw_text, generated_at
+        return raw_text, generated_at, model_id
     except Exception as e:
         logger.warning(f"Outlook generation failed: {e}")
-        return "Unable to generate outlook — AI service unavailable.", ""
+        return "Unable to generate outlook — AI service unavailable.", "", ""
 
 
 @router.get("/outlook")
@@ -180,6 +180,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
         return {
             "text": "",
             "generated_at": "",
+            "model": "",
             "cached": False,
             "pending": True,
             "refresh_mins": 30,
@@ -199,6 +200,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
         return {
             "text": state.outlook_text,
             "generated_at": state.outlook_generated_at,
+            "model": getattr(state, 'outlook_model', ''),
             "cached": True,
             "refresh_mins": outlook_refresh_mins,
         }
@@ -208,6 +210,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
         return {
             "text": state.outlook_text or "AI service temporarily unavailable. Retrying shortly.",
             "generated_at": "",
+            "model": getattr(state, 'outlook_model', ''),
             "cached": True,
             "error": True,
             "refresh_mins": outlook_refresh_mins,
@@ -219,9 +222,10 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
     state.last_outlook_fetch = now
 
     async def _bg_generate():
-        text, generated_at = await generate_outlook(state)
+        text, generated_at, model_id = await generate_outlook(state)
         state.outlook_text = text
         state.outlook_generated_at = generated_at
+        state.outlook_model = model_id
 
     asyncio.create_task(_bg_generate())
 
@@ -232,6 +236,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
         return {
             "text": state.outlook_text,
             "generated_at": state.outlook_generated_at,
+            "model": getattr(state, 'outlook_model', ''),
             "cached": True,
             "pending": True,  # Signal that a refresh is in progress
             "refresh_mins": outlook_refresh_mins,
@@ -239,6 +244,7 @@ async def get_outlook(user: dict = Depends(get_current_user), force: bool = Fals
     return {
         "text": "",
         "generated_at": "",
+        "model": "",
         "cached": False,
         "pending": True,
         "refresh_mins": outlook_refresh_mins,

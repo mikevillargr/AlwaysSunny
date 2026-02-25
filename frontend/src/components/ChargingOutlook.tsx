@@ -7,6 +7,7 @@ import { formatHour12 } from '../utils/constants'
 interface OutlookData {
   text: string
   generated_at: string
+  model?: string
   cached: boolean
   pending?: boolean
   error?: boolean
@@ -187,7 +188,7 @@ export function ChargingOutlook() {
             sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5 }}
           >
             <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem' }}>
-              AI-generated · Updates every {refreshMins} min · Does not control charging
+              AI-generated{outlook?.model ? ` · ${outlook.model}` : ''} · Updates every {refreshMins} min · Does not control charging
             </Typography>
             <Box
               component="span"

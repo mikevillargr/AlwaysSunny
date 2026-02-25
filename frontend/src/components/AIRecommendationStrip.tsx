@@ -10,6 +10,7 @@ interface AIRecommendationStripProps {
   aiConfidence: AIConfidence
   aiReasoning: string
   aiStatus?: string
+  aiModelUsed?: string
   tessieEnabled?: boolean
   chargePortConnected?: boolean
   loading?: boolean
@@ -21,6 +22,7 @@ export function AIRecommendationStrip({
   aiConfidence,
   aiReasoning,
   aiStatus = 'standby',
+  aiModelUsed = '',
   tessieEnabled = true,
   chargePortConnected = false,
   loading = false,
@@ -210,6 +212,11 @@ export function AIRecommendationStrip({
                     ? '"AI recommendation expired — using rule-based charging until next update."'
                     : `"${aiReasoning || 'AI is analyzing your solar and charging data...'}"`}
         </Typography>
+        {visuallyActive && aiModelUsed && !isError && !isFallback && !isWaiting && !(loading) && (
+          <Typography variant="caption" sx={{ fontSize: '0.6rem', color: '#4a6382', mt: 0.3, display: 'block' }}>
+            Model: {aiModelUsed}
+          </Typography>
+        )}
       </Box>
 
       {/* Auto Optimize Toggle */}

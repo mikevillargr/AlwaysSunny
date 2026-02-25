@@ -180,18 +180,24 @@ export function Admin() {
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsMsg, setSettingsMsg] = useState('')
 
-  // AI Provider BYOK
-  const [aiProvider, setAiProvider] = useState('ollama')
-  const [aiPrimaryModel, setAiPrimaryModel] = useState('')
-  const [aiFallbackModel, setAiFallbackModel] = useState('')
+  // AI Provider BYOK — per-slot provider+model
+  const [priProvider, setPriProvider] = useState('ollama')
+  const [priModel, setPriModel] = useState('')
+  const [fbProvider, setFbProvider] = useState('ollama')
+  const [fbModel, setFbModel] = useState('')
   const [openaiKey, setOpenaiKey] = useState('')
   const [anthropicKey, setAnthropicKey] = useState('')
   const [openaiKeySet, setOpenaiKeySet] = useState(false)
   const [anthropicKeySet, setAnthropicKeySet] = useState(false)
   const [providerSaving, setProviderSaving] = useState(false)
   const [providerMsg, setProviderMsg] = useState('')
-  const [availableModels, setAvailableModels] = useState<{id: string; name: string}[]>([])
-  const [modelsLoading, setModelsLoading] = useState(false)
+  const [priModels, setPriModels] = useState<{id: string; name: string}[]>([])
+  const [fbModels, setFbModels] = useState<{id: string; name: string}[]>([])
+  const [priModelsLoading, setPriModelsLoading] = useState(false)
+  const [fbModelsLoading, setFbModelsLoading] = useState(false)
+  // Key verification
+  const [openaiKeyStatus, setOpenaiKeyStatus] = useState<'idle'|'checking'|'valid'|'invalid'>('idle')
+  const [anthropicKeyStatus, setAnthropicKeyStatus] = useState<'idle'|'checking'|'valid'|'invalid'>('idle')
 
   // Load AI settings on mount
   useEffect(() => {
@@ -216,9 +222,10 @@ export function Admin() {
         const resp = await apiFetch('/api/settings')
         if (resp.ok) {
           const data = await resp.json()
-          setAiProvider(data.ai_provider || 'ollama')
-          setAiPrimaryModel(data.ai_primary_model || '')
-          setAiFallbackModel(data.ai_fallback_model || '')
+          setPriProvider(data.ai_primary_provider || 'ollama')
+          setPriModel(data.ai_primary_model || '')
+          setFbProvider(data.ai_fallback_provider || 'ollama')
+          setFbModel(data.ai_fallback_model || '')
           setOpenaiKeySet(data.openai_api_key_set || false)
           setAnthropicKeySet(data.anthropic_api_key_set || false)
         }
@@ -226,29 +233,72 @@ export function Admin() {
     })()
   }, [])
 
-  // Fetch available models when provider changes
+  // Fetch models per slot when provider changes
   useEffect(() => {
     ;(async () => {
-      setModelsLoading(true)
+      setPriModelsLoading(true)
       try {
-        const resp = await apiFetch(`/api/admin/ai-models?provider=${aiProvider}`)
-        if (resp.ok) {
-          const data = await resp.json()
-          setAvailableModels(data.models || [])
-        }
+        const resp = await apiFetch(`/api/admin/ai-models?provider=${priProvider}`)
+        if (resp.ok) setPriModels((await resp.json()).models || [])
       } catch { /* ignore */ }
-      setModelsLoading(false)
+      setPriModelsLoading(false)
     })()
-  }, [aiProvider])
+  }, [priProvider])
+
+  useEffect(() => {
+    ;(async () => {
+      setFbModelsLoading(true)
+      try {
+        const resp = await apiFetch(`/api/admin/ai-models?provider=${fbProvider}`)
+        if (resp.ok) setFbModels((await resp.json()).models || [])
+      } catch { /* ignore */ }
+      setFbModelsLoading(false)
+    })()
+  }, [fbProvider])
+
+  // Verify API key on input
+  const verifyKey = useCallback(async (provider: string, key: string) => {
+    if (!key) return
+    const setter = provider === 'openai' ? setOpenaiKeyStatus : setAnthropicKeyStatus
+    setter('checking')
+    try {
+      const resp = await apiFetch('/api/admin/verify-api-key', {
+        method: 'POST',
+        body: JSON.stringify({ provider, api_key: key }),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        setter(data.valid ? 'valid' : 'invalid')
+      } else {
+        setter('invalid')
+      }
+    } catch {
+      setter('invalid')
+    }
+  }, [])
+
+  // Whether cloud keys are needed
+  const needsOpenai = priProvider === 'openai' || fbProvider === 'openai'
+  const needsAnthropic = priProvider === 'anthropic' || fbProvider === 'anthropic'
 
   const saveProviderSettings = useCallback(async () => {
+    // Guard: don't save if cloud provider selected without key
+    if (needsOpenai && !openaiKeySet && !openaiKey) {
+      setProviderMsg('OpenAI API key required')
+      return
+    }
+    if (needsAnthropic && !anthropicKeySet && !anthropicKey) {
+      setProviderMsg('Anthropic API key required')
+      return
+    }
     setProviderSaving(true)
     setProviderMsg('')
     try {
       const updates: Record<string, string> = {
-        ai_provider: aiProvider,
-        ai_primary_model: aiPrimaryModel,
-        ai_fallback_model: aiFallbackModel,
+        ai_primary_provider: priProvider,
+        ai_primary_model: priModel,
+        ai_fallback_provider: fbProvider,
+        ai_fallback_model: fbModel,
       }
       if (openaiKey) updates.openai_api_key = openaiKey
       if (anthropicKey) updates.anthropic_api_key = anthropicKey
@@ -262,6 +312,8 @@ export function Admin() {
         setAnthropicKeySet(data.anthropic_api_key_set || false)
         setOpenaiKey('')
         setAnthropicKey('')
+        setOpenaiKeyStatus('idle')
+        setAnthropicKeyStatus('idle')
         setProviderMsg('Saved')
         setTimeout(() => setProviderMsg(''), 3000)
       } else {
@@ -272,7 +324,7 @@ export function Admin() {
     } finally {
       setProviderSaving(false)
     }
-  }, [aiProvider, aiPrimaryModel, aiFallbackModel, openaiKey, anthropicKey])
+  }, [priProvider, priModel, fbProvider, fbModel, openaiKey, anthropicKey, needsOpenai, needsAnthropic, openaiKeySet, anthropicKeySet])
 
   const saveSettings = useCallback(async () => {
     if (!aiSettings) return
@@ -419,99 +471,82 @@ export function Admin() {
           AI Provider
         </Typography>
         <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
-          Choose between local Ollama or bring your own API key for OpenAI / Anthropic.
+          Each model slot can use a different provider. Mix local Ollama with OpenAI or Anthropic.
         </Typography>
 
-        {/* Provider selector pills */}
-        <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
-          {[
-            { key: 'ollama', label: 'Ollama (Local)', color: '#a855f7' },
-            { key: 'openai', label: 'OpenAI', color: '#10b981' },
-            { key: 'anthropic', label: 'Anthropic', color: '#f59e0b' },
-          ].map(({ key, label, color }) => {
-            const active = aiProvider === key
-            return (
-              <Box
-                key={key}
-                onClick={() => setAiProvider(key)}
-                sx={{
-                  display: 'flex', alignItems: 'center', gap: 0.75,
-                  px: 2, py: 0.75, borderRadius: '20px', cursor: 'pointer',
-                  border: active ? `1px solid ${color}` : '1px solid #2a3f57',
-                  backgroundColor: active ? `${color}15` : 'transparent',
-                  color: active ? color : '#4a6382',
-                  transition: 'all 0.18s ease', userSelect: 'none',
-                  '&:hover': { borderColor: color, color: color },
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: active ? 600 : 400, color: 'inherit' }}>
-                  {label}
-                </Typography>
-              </Box>
-            )
-          })}
-        </Box>
-
-        {/* Model configuration */}
-        <Grid container spacing={2} sx={{ mb: 2 }}>
+        {/* Per-slot configuration */}
+        <Grid container spacing={3} sx={{ mb: 2 }}>
+          {/* PRIMARY SLOT */}
           <Grid item xs={6}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            <Typography variant="caption" color="#3b82f6" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
               Primary Model
             </Typography>
-            {modelsLoading ? (
-              <CircularProgress size={18} sx={{ color: '#3b82f6' }} />
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
+              {([['ollama', 'Ollama', '#a855f7'], ['openai', 'OpenAI', '#10b981'], ['anthropic', 'Anthropic', '#f59e0b']] as const).map(([k, lbl, clr]) => (
+                <Box key={k} onClick={() => { setPriProvider(k); setPriModel('') }}
+                  sx={{
+                    px: 1.5, py: 0.4, borderRadius: '14px', cursor: 'pointer', fontSize: '0.7rem',
+                    border: priProvider === k ? `1px solid ${clr}` : '1px solid #2a3f57',
+                    bgcolor: priProvider === k ? `${clr}15` : 'transparent',
+                    color: priProvider === k ? clr : '#4a6382',
+                    transition: 'all 0.15s', userSelect: 'none',
+                    '&:hover': { borderColor: clr, color: clr },
+                  }}
+                >{lbl}</Box>
+              ))}
+            </Box>
+            {priModelsLoading ? (
+              <CircularProgress size={16} sx={{ color: '#3b82f6' }} />
             ) : (
-              <Select
-                value={aiPrimaryModel}
-                onChange={(e) => setAiPrimaryModel(e.target.value)}
-                size="small"
-                fullWidth
-                displayEmpty
-                sx={{ '& .MuiSelect-select': { fontSize: '0.85rem' } }}
+              <Select value={priModel} onChange={(e) => setPriModel(e.target.value)}
+                size="small" fullWidth displayEmpty
+                sx={{ '& .MuiSelect-select': { fontSize: '0.8rem' } }}
               >
-                <MenuItem value="">
-                  <em>Default</em>
-                </MenuItem>
-                {availableModels.map((m) => (
+                <MenuItem value=""><em>Default</em></MenuItem>
+                {priModels.map((m: {id: string; name: string}) => (
                   <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
                 ))}
               </Select>
             )}
-            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
-              Main model for AI decisions
-            </Typography>
           </Grid>
+
+          {/* FALLBACK SLOT */}
           <Grid item xs={6}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            <Typography variant="caption" color="#f59e0b" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
               Fallback Model
             </Typography>
-            {modelsLoading ? (
-              <CircularProgress size={18} sx={{ color: '#3b82f6' }} />
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
+              {([['ollama', 'Ollama', '#a855f7'], ['openai', 'OpenAI', '#10b981'], ['anthropic', 'Anthropic', '#f59e0b']] as const).map(([k, lbl, clr]) => (
+                <Box key={k} onClick={() => { setFbProvider(k); setFbModel('') }}
+                  sx={{
+                    px: 1.5, py: 0.4, borderRadius: '14px', cursor: 'pointer', fontSize: '0.7rem',
+                    border: fbProvider === k ? `1px solid ${clr}` : '1px solid #2a3f57',
+                    bgcolor: fbProvider === k ? `${clr}15` : 'transparent',
+                    color: fbProvider === k ? clr : '#4a6382',
+                    transition: 'all 0.15s', userSelect: 'none',
+                    '&:hover': { borderColor: clr, color: clr },
+                  }}
+                >{lbl}</Box>
+              ))}
+            </Box>
+            {fbModelsLoading ? (
+              <CircularProgress size={16} sx={{ color: '#f59e0b' }} />
             ) : (
-              <Select
-                value={aiFallbackModel}
-                onChange={(e) => setAiFallbackModel(e.target.value)}
-                size="small"
-                fullWidth
-                displayEmpty
-                sx={{ '& .MuiSelect-select': { fontSize: '0.85rem' } }}
+              <Select value={fbModel} onChange={(e) => setFbModel(e.target.value)}
+                size="small" fullWidth displayEmpty
+                sx={{ '& .MuiSelect-select': { fontSize: '0.8rem' } }}
               >
-                <MenuItem value="">
-                  <em>Default</em>
-                </MenuItem>
-                {availableModels.map((m) => (
+                <MenuItem value=""><em>Default</em></MenuItem>
+                {fbModels.map((m: {id: string; name: string}) => (
                   <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
                 ))}
               </Select>
             )}
-            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
-              Used when primary fails
-            </Typography>
           </Grid>
         </Grid>
 
-        {/* API Keys — only shown for cloud providers */}
-        {aiProvider !== 'ollama' && (
+        {/* API Keys — shown when ANY slot uses a cloud provider */}
+        {(needsOpenai || needsAnthropic) && (
           <>
             <Divider sx={{ my: 2, borderColor: '#1a2a3d' }} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
@@ -521,44 +556,60 @@ export function Admin() {
               </Typography>
             </Box>
             <Grid container spacing={2}>
-              {aiProvider === 'openai' && (
+              {needsOpenai && (
                 <Grid item xs={12}>
                   <TextField
                     label="OpenAI API Key"
                     value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    onChange={(e) => { setOpenaiKey(e.target.value); setOpenaiKeyStatus('idle') }}
                     size="small"
                     fullWidth
                     type="password"
                     placeholder={openaiKeySet ? '••••••••  (key is set)' : 'sk-...'}
-                    helperText={openaiKeySet ? 'Key is saved. Enter a new one to replace it.' : 'Required for OpenAI models.'}
+                    helperText={openaiKeySet && !openaiKey ? 'Key is saved. Enter a new one to replace it.' : !openaiKeySet ? 'Required for OpenAI models.' : ''}
                     InputProps={{
-                      endAdornment: openaiKeySet ? (
-                        <InputAdornment position="end">
-                          <Chip label="Set" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.65rem' }} />
+                      endAdornment: (
+                        <InputAdornment position="end" sx={{ gap: 0.5 }}>
+                          {openaiKeyStatus === 'checking' && <CircularProgress size={14} />}
+                          {openaiKeyStatus === 'valid' && <Chip label="Valid" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.6rem' }} />}
+                          {openaiKeyStatus === 'invalid' && <Chip label="Invalid" size="small" sx={{ bgcolor: '#ef444420', color: '#ef4444', height: 20, fontSize: '0.6rem' }} />}
+                          {openaiKeySet && openaiKeyStatus === 'idle' && !openaiKey && <Chip label="Set" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.6rem' }} />}
+                          {openaiKey && openaiKeyStatus === 'idle' && (
+                            <Button size="small" onClick={() => verifyKey('openai', openaiKey)}
+                              sx={{ minWidth: 0, px: 1, py: 0.2, fontSize: '0.65rem', textTransform: 'none', color: '#3b82f6' }}
+                            >Verify</Button>
+                          )}
                         </InputAdornment>
-                      ) : undefined,
+                      ),
                     }}
                   />
                 </Grid>
               )}
-              {aiProvider === 'anthropic' && (
+              {needsAnthropic && (
                 <Grid item xs={12}>
                   <TextField
                     label="Anthropic API Key"
                     value={anthropicKey}
-                    onChange={(e) => setAnthropicKey(e.target.value)}
+                    onChange={(e) => { setAnthropicKey(e.target.value); setAnthropicKeyStatus('idle') }}
                     size="small"
                     fullWidth
                     type="password"
                     placeholder={anthropicKeySet ? '••••••••  (key is set)' : 'sk-ant-...'}
-                    helperText={anthropicKeySet ? 'Key is saved. Enter a new one to replace it.' : 'Required for Anthropic models.'}
+                    helperText={anthropicKeySet && !anthropicKey ? 'Key is saved. Enter a new one to replace it.' : !anthropicKeySet ? 'Required for Anthropic models.' : ''}
                     InputProps={{
-                      endAdornment: anthropicKeySet ? (
-                        <InputAdornment position="end">
-                          <Chip label="Set" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.65rem' }} />
+                      endAdornment: (
+                        <InputAdornment position="end" sx={{ gap: 0.5 }}>
+                          {anthropicKeyStatus === 'checking' && <CircularProgress size={14} />}
+                          {anthropicKeyStatus === 'valid' && <Chip label="Valid" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.6rem' }} />}
+                          {anthropicKeyStatus === 'invalid' && <Chip label="Invalid" size="small" sx={{ bgcolor: '#ef444420', color: '#ef4444', height: 20, fontSize: '0.6rem' }} />}
+                          {anthropicKeySet && anthropicKeyStatus === 'idle' && !anthropicKey && <Chip label="Set" size="small" sx={{ bgcolor: '#22c55e20', color: '#22c55e', height: 20, fontSize: '0.6rem' }} />}
+                          {anthropicKey && anthropicKeyStatus === 'idle' && (
+                            <Button size="small" onClick={() => verifyKey('anthropic', anthropicKey)}
+                              sx={{ minWidth: 0, px: 1, py: 0.2, fontSize: '0.65rem', textTransform: 'none', color: '#f59e0b' }}
+                            >Verify</Button>
+                          )}
                         </InputAdornment>
-                      ) : undefined,
+                      ),
                     }}
                   />
                 </Grid>

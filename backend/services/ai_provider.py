@@ -195,31 +195,96 @@ async def generate(
         raise ValueError(f"Unknown AI provider: {provider}")
 
 
-def resolve_provider_config(user_settings: dict) -> dict:
-    """Extract AI provider config from user settings dict.
-
-    Returns dict with keys: provider, primary_model, fallback_model, api_key.
-    Falls back to Ollama defaults if nothing is configured.
-    """
-    provider = user_settings.get("ai_provider", "ollama")
-    if provider not in ("ollama", "openai", "anthropic"):
-        provider = "ollama"
-
-    primary = user_settings.get("ai_primary_model", "") or DEFAULT_MODELS.get(provider, "")
-    fallback = user_settings.get("ai_fallback_model", "") or DEFAULT_FALLBACK_MODELS.get(provider, "")
-    api_key = ""
-
+def _get_api_key(provider: str, user_settings: dict) -> str:
+    """Get the API key for a cloud provider from user settings."""
     if provider == "openai":
-        api_key = user_settings.get("openai_api_key", "")
+        return user_settings.get("openai_api_key", "")
     elif provider == "anthropic":
-        api_key = user_settings.get("anthropic_api_key", "")
+        return user_settings.get("anthropic_api_key", "")
+    return ""
+
+
+def resolve_provider_config(user_settings: dict) -> dict:
+    """Extract per-slot AI provider config from user settings dict.
+
+    Returns dict with keys: primary_provider, primary_model, primary_api_key,
+    fallback_provider, fallback_model, fallback_api_key.
+    Each slot independently resolves its own provider, model, and API key.
+    """
+    s = user_settings or {}
+
+    pri_prov = s.get("ai_primary_provider", "ollama")
+    if pri_prov not in ("ollama", "openai", "anthropic"):
+        pri_prov = "ollama"
+    pri_model = s.get("ai_primary_model", "") or DEFAULT_MODELS.get(pri_prov, "")
+    pri_key = _get_api_key(pri_prov, s)
+
+    fb_prov = s.get("ai_fallback_provider", "ollama")
+    if fb_prov not in ("ollama", "openai", "anthropic"):
+        fb_prov = "ollama"
+    fb_model = s.get("ai_fallback_model", "") or DEFAULT_FALLBACK_MODELS.get(fb_prov, "")
+    fb_key = _get_api_key(fb_prov, s)
 
     return {
-        "provider": provider,
-        "primary_model": primary,
-        "fallback_model": fallback,
-        "api_key": api_key,
+        "primary_provider": pri_prov,
+        "primary_model": pri_model,
+        "primary_api_key": pri_key,
+        "fallback_provider": fb_prov,
+        "fallback_model": fb_model,
+        "fallback_api_key": fb_key,
     }
+
+
+async def verify_api_key(provider: str, api_key: str) -> tuple[bool, str]:
+    """Verify an API key by making a lightweight API call.
+
+    Returns (valid, detail_message).
+    """
+    if provider == "openai":
+        try:
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            timeout = httpx.Timeout(10, connect=5)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers=headers,
+                )
+                if resp.status_code == 200:
+                    return True, "Valid — connected to OpenAI"
+                elif resp.status_code == 401:
+                    return False, "Invalid API key"
+                else:
+                    return False, f"HTTP {resp.status_code}"
+        except Exception as e:
+            return False, f"Connection error: {e}"
+
+    elif provider == "anthropic":
+        try:
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            }
+            timeout = httpx.Timeout(10, connect=5)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                # Send a minimal request — Anthropic doesn't have a /models list endpoint,
+                # so we send a tiny message and check for auth errors
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers=headers,
+                    json={"model": "claude-3-haiku-20240307", "max_tokens": 1,
+                          "messages": [{"role": "user", "content": "hi"}]},
+                )
+                if resp.status_code == 200:
+                    return True, "Valid — connected to Anthropic"
+                elif resp.status_code in (401, 403):
+                    return False, "Invalid API key"
+                else:
+                    return False, f"HTTP {resp.status_code}"
+        except Exception as e:
+            return False, f"Connection error: {e}"
+
+    return False, f"Unknown provider: {provider}"
 
 
 async def generate_with_fallback(
@@ -230,67 +295,70 @@ async def generate_with_fallback(
     temperature: float = 0.1,
     max_tokens: int = 150,
     max_retries: int = 3,
-    provider_override: str | None = None,
     model_override: str | None = None,
-    api_key_override: str | None = None,
 ) -> tuple[str, str]:
     """Generate with automatic retry and fallback model.
 
-    Returns (response_text, model_used).
+    Primary and fallback can use different providers.
+    Returns (response_text, "provider/model_used").
     """
     import asyncio
 
     config = resolve_provider_config(user_settings or {})
-    provider = provider_override or config["provider"]
-    primary = model_override or config["primary_model"]
-    fallback = config["fallback_model"]
-    api_key = api_key_override or config["api_key"]
+    pri_prov = config["primary_provider"]
+    pri_model = model_override or config["primary_model"]
+    pri_key = config["primary_api_key"]
+    fb_prov = config["fallback_provider"]
+    fb_model = config["fallback_model"]
+    fb_key = config["fallback_api_key"]
 
     # --- Try primary model ---
     last_error: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
             text = await generate(
-                prompt, provider=provider, model=primary, api_key=api_key,
+                prompt, provider=pri_prov, model=pri_model, api_key=pri_key,
                 format_json=format_json, temperature=temperature,
                 max_tokens=max_tokens,
             )
             if attempt > 1:
-                logger.info(f"AI [{provider}/{primary}] succeeded on attempt {attempt}")
-            return text, primary
+                logger.info(f"AI [{pri_prov}/{pri_model}] succeeded on attempt {attempt}")
+            return text, f"{pri_prov}/{pri_model}"
         except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError,
                 httpx.PoolTimeout) as e:
             last_error = e
             if attempt < max_retries:
                 wait = 5 * (2 ** (attempt - 1))
                 logger.warning(
-                    f"AI [{provider}/{primary}] attempt {attempt}/{max_retries} failed "
+                    f"AI [{pri_prov}/{pri_model}] attempt {attempt}/{max_retries} failed "
                     f"({type(e).__name__}), retrying in {wait}s..."
                 )
                 await asyncio.sleep(wait)
             else:
-                logger.error(f"AI [{provider}/{primary}] failed after {max_retries} attempts")
+                logger.error(f"AI [{pri_prov}/{pri_model}] failed after {max_retries} attempts")
         except httpx.HTTPStatusError as e:
             if e.response.status_code >= 500 and attempt < max_retries:
                 wait = 5 * (2 ** (attempt - 1))
-                logger.warning(f"AI [{provider}/{primary}] got {e.response.status_code}, retrying...")
+                logger.warning(f"AI [{pri_prov}/{pri_model}] got {e.response.status_code}, retrying...")
                 await asyncio.sleep(wait)
                 last_error = e
             else:
                 raise
 
-    # --- Try fallback model ---
-    if fallback and fallback != primary:
-        logger.warning(f"Primary [{provider}/{primary}] failed, trying fallback [{fallback}]...")
+    # --- Try fallback model (may be different provider) ---
+    fb_id = f"{fb_prov}/{fb_model}"
+    pri_id = f"{pri_prov}/{pri_model}"
+    if fb_model and fb_id != pri_id:
+        logger.warning(f"Primary [{pri_id}] failed, trying fallback [{fb_id}]...")
         try:
             text = await generate(
-                prompt, provider=provider, model=fallback, api_key=api_key,
+                prompt, provider=fb_prov, model=fb_model, api_key=fb_key,
                 format_json=format_json, temperature=temperature,
                 max_tokens=max_tokens,
             )
-            return text, fallback
+            return text, fb_id
         except Exception as fallback_err:
-            logger.error(f"Fallback [{provider}/{fallback}] also failed: {fallback_err}")
+            logger.error(f"Fallback [{fb_id}] also failed: {fallback_err}")
             raise last_error or fallback_err from fallback_err
 
-    raise last_error or Exception(f"AI [{provider}/{primary}] failed after all retries")
+    raise last_error or Exception(f"AI [{pri_id}] failed after all retries")

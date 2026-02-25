@@ -107,6 +107,7 @@ export interface StatusResponse {
   ai_confidence: AIConfidence
   ai_trigger_reason: AITriggerReason
   ai_last_updated_secs: number
+  ai_model_used: string
   // Target SoC from settings
   target_soc: number
   // Tessie connection

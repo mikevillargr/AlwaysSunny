@@ -5,8 +5,6 @@ import {
   Chip,
   Typography,
   Grid,
-  Tabs,
-  Tab,
   Collapse,
   CircularProgress,
   Divider,
@@ -319,11 +317,15 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
   )
 }
 
+const PAGE_SIZE = 10
+
 export function History() {
-  const [tabValue, setTabValue] = useState(0)
   const [sessions, setSessions] = useState<SessionRecord[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
   const [currencySymbol, setCurrencySymbol] = useState('₱')
+  const [allSessions, setAllSessions] = useState<SessionRecord[]>([])
 
   useEffect(() => {
     async function fetchSettings() {
@@ -339,54 +341,59 @@ export function History() {
     fetchSettings()
   }, [])
 
+  // Fetch summary stats once (all sessions, large limit)
   useEffect(() => {
-    async function fetchSessions() {
+    ;(async () => {
       try {
-        setLoading(true)
-        const res = await apiFetch('/api/sessions?limit=100')
+        const res = await apiFetch('/api/sessions?limit=100&offset=0')
         if (res.ok) {
           const data = await res.json()
-          // Filter out orphaned sessions (0 kWh, no end time, no data)
+          const valid = (data.sessions || []).filter((s: SessionRecord) =>
+            (s.kwh_added && s.kwh_added > 0) || !s.ended_at
+          )
+          setAllSessions(valid)
+        }
+      } catch { /* ignore */ }
+    })()
+  }, [])
+
+  // Fetch paginated sessions
+  useEffect(() => {
+    ;(async () => {
+      try {
+        setLoading(true)
+        const offset = page * PAGE_SIZE
+        const res = await apiFetch(`/api/sessions?limit=${PAGE_SIZE}&offset=${offset}`)
+        if (res.ok) {
+          const data = await res.json()
           const valid = (data.sessions || []).filter((s: SessionRecord) =>
             (s.kwh_added && s.kwh_added > 0) || !s.ended_at
           )
           setSessions(valid)
+          setTotal(data.total || 0)
         }
       } catch (e) {
         console.warn('[History] Failed to fetch sessions:', e)
       } finally {
         setLoading(false)
       }
-    }
-    fetchSessions()
-  }, [])
+    })()
+  }, [page])
 
-  // Filter sessions by tab
-  const now = new Date()
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  const filtered = sessions.filter((s) => {
-    if (tabValue === 2) return true // All Time
-    const d = new Date(s.started_at)
-    if (tabValue === 0) return d >= thisMonthStart
-    if (tabValue === 1) return d >= lastMonthStart && d < thisMonthStart
-    return true
-  })
-
-  // Compute summary stats from completed sessions only
-  const completed = sessions.filter((s) => s.ended_at && s.kwh_added && s.kwh_added > 0)
+  // Compute summary stats from all sessions (not just current page)
+  const completed = allSessions.filter((s) => s.ended_at && s.kwh_added && s.kwh_added > 0)
   const totalSolarKwh = completed.reduce((sum, s) => sum + (s.solar_kwh ?? 0), 0)
   const totalSaved = completed.reduce((sum, s) => sum + (s.saved_amount ?? 0), 0)
   const totalKwh = completed.reduce((sum, s) => sum + (s.kwh_added ?? 0), 0)
   const avgSubsidy = totalKwh > 0 ? Math.round((totalSolarKwh / totalKwh) * 100) : 0
-  const thisMonthCount = sessions.filter((s) => new Date(s.started_at) >= thisMonthStart).length
 
   const summaryStats = [
-    { label: 'All-time solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
-    { label: 'All-time saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
+    { label: 'Total solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
+    { label: 'Total saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
     { label: 'Avg Tesla solar %', value: `${avgSubsidy}%`, color: '#f5c518' },
-    { label: 'Sessions this month', value: `${thisMonthCount}` },
+    { label: 'Total sessions', value: `${total}` },
   ]
 
   return (
@@ -431,40 +438,61 @@ export function History() {
         ))}
       </Grid>
 
-      {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs
-          value={tabValue}
-          onChange={(_, v) => setTabValue(v)}
-          textColor="primary"
-          indicatorColor="primary"
-        >
-          <Tab label="This Month" />
-          <Tab label="Last Month" />
-          <Tab label="All Time" />
-        </Tabs>
-      </Box>
-
       {/* Session List */}
       <Box>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
             <CircularProgress size={32} />
           </Box>
-        ) : filtered.length === 0 ? (
+        ) : sessions.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <Battery size={40} color="#4a6382" />
             <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
               No sessions yet
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Sessions will appear here once your car starts charging.
+              Sessions will appear here once your car starts charging at home.
             </Typography>
           </Box>
         ) : (
-          filtered.map((session) => (
-            <SessionCard key={session.id} session={session} currencySymbol={currencySymbol} />
-          ))
+          <>
+            {sessions.map((session) => (
+              <SessionCard key={session.id} session={session} currencySymbol={currencySymbol} />
+            ))}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 3, mb: 2 }}>
+                <Typography
+                  variant="body2"
+                  onClick={() => setPage(Math.max(0, page - 1))}
+                  sx={{
+                    cursor: page > 0 ? 'pointer' : 'default',
+                    color: page > 0 ? '#3b82f6' : '#4a6382',
+                    userSelect: 'none',
+                    '&:hover': page > 0 ? { textDecoration: 'underline' } : {},
+                  }}
+                >
+                  ← Previous
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Page {page + 1} of {totalPages}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+                  sx={{
+                    cursor: page < totalPages - 1 ? 'pointer' : 'default',
+                    color: page < totalPages - 1 ? '#3b82f6' : '#4a6382',
+                    userSelect: 'none',
+                    '&:hover': page < totalPages - 1 ? { textDecoration: 'underline' } : {},
+                  }}
+                >
+                  Next →
+                </Typography>
+              </Box>
+            )}
+          </>
         )}
       </Box>
     </Box>

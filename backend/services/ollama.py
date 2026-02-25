@@ -22,6 +22,7 @@ class AIRecommendation:
         self.raw = raw_response
         self.trigger_reason = trigger_reason
         self.timestamp = time.time()
+        self.model_used = raw_response.get("model", "")
 
         # Parse the JSON response from Ollama
         response_text = raw_response.get("response", "{}")
@@ -77,6 +78,7 @@ class AIRecommendation:
             "ai_confidence": self.confidence,
             "ai_trigger_reason": self.trigger_reason,
             "ai_last_updated_secs": self.age_secs,
+            "ai_model_used": self.model_used,
         }
 
 
@@ -495,74 +497,35 @@ async def call_ollama(
 ) -> AIRecommendation:
     """Call AI provider and return parsed recommendation.
 
-    Routes to Ollama, OpenAI, or Anthropic based on user_settings['ai_provider'].
-    Falls back to Ollama if no provider is configured.
+    Routes through generate_with_fallback which supports mixed providers
+    (e.g. primary=OpenAI, fallback=Ollama).
     """
     import logging
     logger = logging.getLogger(__name__)
-    settings = get_settings()
     temperature = temperature_override if temperature_override is not None else 0.1
     num_predict = max_tokens_override or 150
 
-    # Check if user has configured a cloud provider
-    from services.ai_provider import resolve_provider_config, generate_with_fallback
+    from services.ai_provider import generate_with_fallback, resolve_provider_config
     config = resolve_provider_config(user_settings or {})
 
-    if config["provider"] in ("openai", "anthropic") and config["api_key"]:
-        # Route through cloud provider
-        text, model_used = await generate_with_fallback(
-            prompt,
-            user_settings=user_settings,
-            format_json=True,
-            temperature=temperature,
-            max_tokens=num_predict,
-            max_retries=max_retries,
-            model_override=model_override,
-        )
-        # Wrap in a dict matching Ollama's response format for AIRecommendation
-        raw = {"response": text, "model": model_used}
-        rec = AIRecommendation(raw, trigger_reason)
-        if model_used != config["primary_model"]:
-            rec.reasoning = f"[fallback model] {rec.reasoning}"
-        return rec
+    text, model_id = await generate_with_fallback(
+        prompt,
+        user_settings=user_settings,
+        format_json=True,
+        temperature=temperature,
+        max_tokens=num_predict,
+        max_retries=max_retries,
+        model_override=model_override,
+    )
+    raw = {"response": text, "model": model_id}
+    rec = AIRecommendation(raw, trigger_reason)
 
-    # --- Ollama path (original behavior) ---
-    model = model_override or config["primary_model"] or settings.ollama_model
+    # Mark if fallback was used
+    pri_id = f"{config['primary_provider']}/{config['primary_model']}"
+    if model_id != pri_id:
+        rec.reasoning = f"[fallback model] {rec.reasoning}"
 
-    try:
-        raw = await _generate(
-            settings.ollama_host, model, prompt,
-            format_json=True, temperature=temperature,
-            num_predict=num_predict, max_retries=max_retries,
-        )
-        return AIRecommendation(raw, trigger_reason)
-    except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError,
-            httpx.PoolTimeout, Exception) as primary_err:
-        if not isinstance(primary_err, (httpx.ReadTimeout, httpx.ConnectTimeout,
-                                         httpx.ConnectError, httpx.PoolTimeout)):
-            if "failed after all retries" not in str(primary_err):
-                raise
-
-        fallback = config["fallback_model"] or settings.ollama_fallback_model
-        if not fallback or fallback == model:
-            raise
-
-        logger.warning(
-            f"Primary model [{model}] unreachable, trying fallback [{fallback}]..."
-        )
-        try:
-            raw = await _generate(
-                settings.ollama_host, fallback, prompt,
-                format_json=True, temperature=temperature,
-                num_predict=num_predict, max_retries=2,
-            )
-            rec = AIRecommendation(raw, trigger_reason)
-            rec.reasoning = f"[fallback model] {rec.reasoning}"
-            logger.info(f"Fallback model [{fallback}] succeeded: {rec.recommended_amps}A")
-            return rec
-        except Exception as fallback_err:
-            logger.error(f"Fallback model [{fallback}] also failed: {fallback_err}")
-            raise primary_err from fallback_err
+    return rec
 
 
 def _clean_text_response(raw: str) -> str:
@@ -581,61 +544,26 @@ async def call_ollama_text(
     model_override: str | None = None,
     max_tokens_override: int | None = None,
     user_settings: dict | None = None,
-) -> str:
+) -> tuple[str, str]:
     """Call AI provider and return raw text response (no JSON format constraint).
 
     Used for free-form text generation like the charging outlook.
-    Routes to configured provider; tries primary then fallback model.
+    Returns (text, model_id) for attribution.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    settings = get_settings()
     num_predict = max_tokens_override or 200
 
-    # Check if user has configured a cloud provider
-    from services.ai_provider import resolve_provider_config, generate_with_fallback
-    config = resolve_provider_config(user_settings or {})
+    from services.ai_provider import generate_with_fallback
 
-    if config["provider"] in ("openai", "anthropic") and config["api_key"]:
-        text, _ = await generate_with_fallback(
-            prompt,
-            user_settings=user_settings,
-            format_json=False,
-            temperature=0.3,
-            max_tokens=num_predict,
-            max_retries=max_retries,
-            model_override=model_override,
-        )
-        return _clean_text_response(text)
-
-    # --- Ollama path (original behavior) ---
-    model = model_override or config["primary_model"] or settings.ollama_model
-
-    try:
-        raw = await _generate(
-            settings.ollama_host, model, prompt,
-            format_json=False, temperature=0.3,
-            num_predict=num_predict, max_retries=max_retries,
-        )
-        return _clean_text_response(raw.get("response", ""))
-    except Exception as primary_err:
-        fallback = config["fallback_model"] or settings.ollama_fallback_model
-        if not fallback or fallback == model:
-            raise
-
-        logger.warning(
-            f"Primary text model [{model}] failed, trying fallback [{fallback}]..."
-        )
-        try:
-            raw = await _generate(
-                settings.ollama_host, fallback, prompt,
-                format_json=False, temperature=0.3,
-                num_predict=num_predict, max_retries=2,
-            )
-            return _clean_text_response(raw.get("response", ""))
-        except Exception as fallback_err:
-            logger.error(f"Fallback text model [{fallback}] also failed: {fallback_err}")
-            raise primary_err from fallback_err
+    text, model_id = await generate_with_fallback(
+        prompt,
+        user_settings=user_settings,
+        format_json=False,
+        temperature=0.3,
+        max_tokens=num_predict,
+        max_retries=max_retries,
+        model_override=model_override,
+    )
+    return _clean_text_response(text), model_id
 
 
 # ---------------------------------------------------------------------------

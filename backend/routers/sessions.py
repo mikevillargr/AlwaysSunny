@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 
 from middleware.auth import get_current_user
 from services.supabase_client import (
-    get_sessions, get_active_session, get_session_snapshots, get_supabase_admin,
-    close_open_sessions,
+    get_sessions, get_sessions_count, get_active_session, get_session_snapshots,
+    get_supabase_admin, close_open_sessions,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,8 @@ async def list_sessions(
     except Exception as e:
         logger.warning(f"[{user['id'][:8]}] Failed to overlay live session data: {e}")
 
-    return {"sessions": sessions, "count": len(sessions)}
+    total = get_sessions_count(user["id"])
+    return {"sessions": sessions, "count": len(sessions), "total": total, "offset": offset, "limit": limit}
 
 
 @router.get("/sessions/{session_id}/details")

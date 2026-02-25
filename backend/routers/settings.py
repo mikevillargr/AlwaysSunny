@@ -90,9 +90,10 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
         has_home_battery=_parse_bool(merged.get("has_home_battery", "false")),
         has_net_metering=_parse_bool(merged.get("has_net_metering", "false")),
         currency_code=merged.get("currency_code", "PHP"),
-        # AI provider BYOK
-        ai_provider=merged.get("ai_provider", "ollama"),
+        # AI provider BYOK — per-slot provider+model
+        ai_primary_provider=merged.get("ai_primary_provider", "ollama"),
         ai_primary_model=merged.get("ai_primary_model") or None,
+        ai_fallback_provider=merged.get("ai_fallback_provider", "ollama"),
         ai_fallback_model=merged.get("ai_fallback_model") or None,
         openai_api_key_set=bool(merged.get("openai_api_key", "")),
         anthropic_api_key_set=bool(merged.get("anthropic_api_key", "")),

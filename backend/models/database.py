@@ -150,9 +150,10 @@ class SettingsUpdate(BaseModel):
     has_home_battery: Optional[bool] = None
     has_net_metering: Optional[bool] = None
     currency_code: Optional[str] = None
-    # AI provider BYOK
-    ai_provider: Optional[str] = None
+    # AI provider BYOK — each slot picks its own provider+model
+    ai_primary_provider: Optional[str] = None
     ai_primary_model: Optional[str] = None
+    ai_fallback_provider: Optional[str] = None
     ai_fallback_model: Optional[str] = None
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
@@ -183,9 +184,10 @@ class SettingsResponse(BaseModel):
     has_home_battery: bool = False
     has_net_metering: bool = False
     currency_code: str = "PHP"
-    # AI provider BYOK
-    ai_provider: str = "ollama"
+    # AI provider BYOK — per-slot provider+model
+    ai_primary_provider: str = "ollama"
     ai_primary_model: Optional[str] = None
+    ai_fallback_provider: str = "ollama"
     ai_fallback_model: Optional[str] = None
     openai_api_key_set: bool = False
     anthropic_api_key_set: bool = False
