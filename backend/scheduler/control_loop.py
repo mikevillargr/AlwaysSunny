@@ -83,6 +83,9 @@ class UserLoopState:
     outlook_generated_at: str = ""
     last_outlook_fetch: float = 0
 
+    # Tessie charge history reconciliation (daily)
+    last_tessie_reconcile: float = 0
+
     # Credentials (cached from DB)
     creds: dict = field(default_factory=dict)
     settings: dict = field(default_factory=dict)
@@ -886,6 +889,81 @@ async def _control_tick(user_id: str) -> None:
         save_snapshot(user_id, snapshot)
     except Exception as e:
         logger.error(f"[{state.user_id[:8]}] Snapshot save failed: {e}")
+
+    # 9. Daily Tessie charge history reconciliation
+    # Runs once per 24h — backfills sessions missed by the tracker
+    if now - state.last_tessie_reconcile > 86400:
+        state.last_tessie_reconcile = now
+        api_key = state.creds.get("tessie_api_key", "")
+        vin = state.creds.get("tessie_vin", "")
+        if api_key and vin:
+            import asyncio as _asyncio
+
+            async def _bg_tessie_reconcile():
+                try:
+                    await _reconcile_tessie_charges(user_id, api_key, vin, electricity_rate)
+                except Exception as e:
+                    logger.warning(f"[{user_id[:8]}] Tessie reconciliation failed: {e}")
+
+            _asyncio.create_task(_bg_tessie_reconcile())
+
+
+async def _reconcile_tessie_charges(
+    user_id: str, api_key: str, vin: str, electricity_rate: float
+) -> None:
+    """Fetch recent Tessie charges and backfill any missing DB sessions."""
+    import httpx
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from services.supabase_client import get_supabase_admin
+
+    now_ts = int(time.time())
+    week_ago = now_ts - 7 * 86400
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"https://api.tessie.com/{vin}/charges",
+            headers={"Authorization": f"Bearer {api_key}"},
+            params={"from": week_ago, "to": now_ts, "distance_format": "km", "format": "json"},
+        )
+        resp.raise_for_status()
+        tessie_charges = resp.json().get("results", [])
+
+    if not tessie_charges:
+        return
+
+    sb = get_supabase_admin()
+    cutoff = (_dt.now(_tz.utc) - _td(days=7)).isoformat()
+    db_result = sb.table("sessions").select("id,started_at").eq("user_id", user_id).gte("started_at", cutoff).execute()
+    db_starts = [_dt.fromisoformat(ds["started_at"]) for ds in (db_result.data or [])]
+
+    backfilled = 0
+    for tc in tessie_charges:
+        tc_start = _dt.fromtimestamp(tc["started_at"], tz=_tz.utc)
+        tc_kwh = tc.get("energy_added", 0)
+        if tc_kwh < 0.5:
+            continue
+        if any(abs((tc_start - ds).total_seconds()) < 600 for ds in db_starts):
+            continue
+
+        tc_end = _dt.fromtimestamp(tc["ended_at"], tz=_tz.utc) if tc.get("ended_at") else None
+        duration_mins = round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else 0
+        sb.table("sessions").insert({
+            "user_id": user_id,
+            "started_at": tc_start.isoformat(),
+            "ended_at": tc_end.isoformat() if tc_end else None,
+            "duration_mins": duration_mins,
+            "kwh_added": round(tc_kwh, 2),
+            "start_soc": tc.get("starting_battery", 0),
+            "end_soc": tc.get("ending_battery", 0),
+            "target_soc": tc.get("ending_battery", 80),
+            "electricity_rate": electricity_rate,
+            "solar_kwh": 0, "solar_pct": 0, "grid_kwh": 0, "saved_amount": 0,
+            "subsidy_calculation_method": "tessie_backfill",
+        }).execute()
+        backfilled += 1
+
+    if backfilled:
+        logger.info(f"[{user_id[:8]}] Tessie reconciliation: backfilled {backfilled} missed sessions")
 
 
 def _get_ollama_health() -> bool:
