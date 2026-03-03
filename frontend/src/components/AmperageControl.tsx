@@ -33,22 +33,26 @@ export function AmperageControl({
   const [localAmps, setLocalAmps] = useState<number>(teslaChargingAmps)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Priority for display value:
-  // 1. AI active with fresh recommendation: show AI target immediately (optimistic)
-  // 2. When system has sent a command (lastAmpsSent >= 0): show what we commanded
-  // 3. Otherwise: show Tesla's actual current draw
+  // Display value priority:
+  // 1. Manual slider drag: keep localAmps (handled by handleSliderChange)
+  // 2. Otherwise: show what the car is actually set to (charge_current_request)
+  //    This is the ground truth — what Tesla accepted, not what we hoped to send
   useEffect(() => {
-    if (autoOptimize && aiRecommendedAmps > 0) {
-      setLocalAmps(aiRecommendedAmps)
+    if (teslaChargeCurrentRequest > 0) {
+      setLocalAmps(teslaChargeCurrentRequest)
     } else if (lastAmpsSent >= 0) {
       setLocalAmps(lastAmpsSent)
     } else {
       setLocalAmps(teslaChargingAmps)
     }
-  }, [teslaChargingAmps, lastAmpsSent, autoOptimize, aiRecommendedAmps])
+  }, [teslaChargingAmps, teslaChargeCurrentRequest, lastAmpsSent])
 
-  // Whether the AI target is pending (sent but Tesla hasn't matched yet)
-  const aiPending = autoOptimize && aiRecommendedAmps > 0 && aiRecommendedAmps !== teslaChargingAmps
+  // AI command status:
+  // - confirmed: car accepted the AI recommendation
+  // - pending: AI sent a value but car hasn't confirmed yet
+  // - mismatch: car is at a different value than AI wants
+  const aiConfirmed = autoOptimize && aiRecommendedAmps > 0 && teslaChargeCurrentRequest === aiRecommendedAmps
+  const aiPending = autoOptimize && aiRecommendedAmps > 0 && teslaChargeCurrentRequest !== aiRecommendedAmps
 
   const handleSliderChange = (_: unknown, val: number | number[]) => {
     setLocalAmps(val as number)
@@ -175,15 +179,19 @@ export function AmperageControl({
           >
             {!tessieEnabled
               ? 'Tessie disconnected'
-              : teslaThrottled
-                ? `Commanded ${teslaChargeCurrentRequest}A · Tesla drawing ${teslaChargingAmps}A (BMS throttle at ${teslaSoc}% SoC)`
-                : aiPending
-                  ? `Sending ${aiRecommendedAmps}A to Tesla · currently ${teslaChargingAmps}A`
-                  : lastAmpsSent >= 0 && lastAmpsSent !== teslaChargingAmps
-                    ? `Commanded ${lastAmpsSent}A · Tesla drawing ${teslaChargingAmps}A`
-                    : autoOptimize
-                      ? 'Managed by AI optimizer'
-                      : `${teslaAmperage * 230}W charging rate`}
+              : aiPending
+                ? `AI target ${aiRecommendedAmps}A · Car set to ${teslaChargeCurrentRequest}A · Retrying…`
+                : aiConfirmed && teslaThrottled
+                  ? `AI set ${aiRecommendedAmps}A ✓ · Drawing ${teslaChargingAmps}A (BMS throttle at ${teslaSoc}% SoC)`
+                  : aiConfirmed
+                    ? `AI set ${aiRecommendedAmps}A ✓ · Drawing ${teslaChargingAmps}A`
+                    : teslaThrottled
+                      ? `Set to ${teslaChargeCurrentRequest}A · Drawing ${teslaChargingAmps}A (BMS throttle at ${teslaSoc}% SoC)`
+                      : lastAmpsSent >= 0 && lastAmpsSent !== teslaChargingAmps
+                        ? `Commanded ${lastAmpsSent}A · Drawing ${teslaChargingAmps}A`
+                        : autoOptimize
+                          ? 'Managed by AI optimizer'
+                          : `${teslaAmperage * 230}W charging rate`}
           </Typography>
         </Box>
 

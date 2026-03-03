@@ -756,6 +756,13 @@ async def _control_tick(user_id: str) -> None:
             )
 
     # 5. Send Tesla command (only if tessie_enabled and we have a definite setpoint)
+    # Compare against both last_amps_sent AND what the car actually reports
+    # (Tessie may return success but the car might not apply the change)
+    car_amps = tesla.charge_current_request  # what the car's actually set to
+    needs_send = final_amps != state.last_amps_sent or (
+        final_amps >= 5 and car_amps != final_amps
+    )
+
     if not tessie_enabled:
         state.mode = "Tessie Disconnected"
         logger.debug(f"[{state.user_id[:8]}] Tessie disabled — skipping commands")
@@ -775,10 +782,16 @@ async def _control_tick(user_id: str) -> None:
                 await set_charging_amps(api_key, vin, final_amps)
                 state.last_amps_sent = final_amps
                 logger.info(f"[{state.user_id[:8]}] Start charging at {final_amps}A")
-            elif final_amps >= 5 and final_amps != state.last_amps_sent:
+            elif final_amps >= 5 and needs_send:
                 await set_charging_amps(api_key, vin, final_amps)
                 state.last_amps_sent = final_amps
-                logger.info(f"[{state.user_id[:8]}] Set amps: {final_amps}A")
+                if car_amps != final_amps:
+                    logger.info(
+                        f"[{state.user_id[:8]}] Set amps: {final_amps}A "
+                        f"(car was at {car_amps}A, re-sending)"
+                    )
+                else:
+                    logger.info(f"[{state.user_id[:8]}] Set amps: {final_amps}A")
         except Exception as e:
             logger.error(f"[{state.user_id[:8]}] Tesla command failed: {e}")
 
@@ -1088,7 +1101,7 @@ def build_status_response(state: UserLoopState) -> dict:
     # Watts of solar currently going to Tesla (proportional allocation)
     # household_w includes Tesla charging, so solar is shared proportionally
     if household_w > 0 and tesla_w > 0 and solar_w > 0:
-        solar_to_tesla_w = min(solar_w * (tesla_w / household_w), tesla_w)
+        solar_to_tesla_w = min(solar_w * (tesla_w / household_w), solar_w, tesla_w)
     else:
         solar_to_tesla_w = 0.0
 
