@@ -17,8 +17,11 @@ router = APIRouter()
 CO2_KG_PER_LITER = 2.31  # kg CO2 per liter of gasoline
 
 
-def _period_start(period: str, tz_name: str) -> datetime | None:
-    """Return the UTC start datetime for the given period, or None for 'all'."""
+def _period_start(period: str, tz_name: str) -> str | None:
+    """Return the UTC ISO-8601 start string for the given period, or None for 'all'.
+
+    Returns a string (not datetime) so it works directly with Supabase .gte().
+    """
     if period == "all":
         return None
 
@@ -39,7 +42,10 @@ def _period_start(period: str, tz_name: str) -> datetime | None:
     else:
         return None
 
-    return start_local.astimezone(timezone.utc)
+    utc_start = start_local.astimezone(timezone.utc)
+    iso = utc_start.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    logger.info(f"[Reports] period={period} tz={tz_name} → start={iso}")
+    return iso
 
 
 def _compute_savings(
@@ -156,7 +162,7 @@ async def reports_summary(
 
     start = _period_start(period, tz_name)
     if start:
-        query = query.gte("started_at", start.isoformat())
+        query = query.gte("started_at", start)
 
     result = query.execute()
     sessions = [s for s in (result.data or []) if float(s.get("kwh_added") or 0) > 0]

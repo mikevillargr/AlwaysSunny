@@ -69,7 +69,7 @@ function SessionCard({ session, currencySymbol, fuelSettings }: { session: Sessi
   const sessionEvCost = kwh * fuelSettings.rate
   const sessionEvVsGas = Math.max(0, sessionGasCost - sessionEvCost)
   const sessionTotalSaved = saved + sessionEvVsGas
-  const isActive = !session.ended_at
+  const isActive = session.is_live === true
   const startedDate = new Date(session.started_at)
 
   const handleToggle = () => {
@@ -478,18 +478,14 @@ export function History() {
       </Typography>
 
       {/* Summary Stats */}
-      <Grid
-        container
-        spacing={2}
-        justifyContent="center"
-        sx={{ mb: 4 }}
-      >
+      <Grid container spacing={1.5} sx={{ mb: 4 }}>
         {summaryStats.map((stat, index) => (
-          <Grid item xs={6} sm={index === 0 ? 4 : 3} md={index === 0 ? 3 : 2} key={index}>
+          <Grid item xs={6} sm={4} md={2} key={index}>
             <Tooltip title={stat.tooltip || ''} arrow placement="top">
               <Card sx={{
-                p: 2,
+                p: 1.5,
                 textAlign: 'center',
+                height: '100%',
                 ...(index === 0 && {
                   border: '1px solid rgba(34,197,94,0.3)',
                   background: 'linear-gradient(135deg, rgba(34,197,94,0.06) 0%, transparent 100%)',
@@ -499,17 +495,17 @@ export function History() {
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{ textTransform: 'uppercase' }}
+                    sx={{ textTransform: 'uppercase', fontSize: '0.65rem' }}
                   >
                     {stat.label}
                   </Typography>
-                  <Info size={10} color="#4a6382" />
+                  <Info size={9} color="#4a6382" />
                 </Box>
                 <Typography
-                  variant={index === 0 ? 'h4' : 'h5'}
+                  variant="h6"
                   fontWeight="700"
                   color={stat.color || 'text.primary'}
-                  sx={{ mt: 0.5 }}
+                  sx={{ mt: 0.5, fontSize: { xs: '1rem', md: '1.15rem' } }}
                 >
                   {stat.value}
                 </Typography>

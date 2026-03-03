@@ -17,40 +17,75 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-PHANTOM_AGE_HOURS = 12  # Sessions open longer than this are considered phantom
+PHANTOM_AGE_HOURS = 12  # Hard fallback — sessions older than this are always closed
+
+
+def _get_active_tracker_session_id(user_id: str) -> int | None:
+    """Return the DB session ID that the in-memory tracker considers active, or None."""
+    try:
+        from scheduler.control_loop import get_user_state
+        state = get_user_state(user_id)
+        if state and state.session_tracker.active:
+            return state.session_tracker.active.db_session_id
+    except Exception:
+        pass
+    return None
 
 
 def _close_phantom_sessions(user_id: str) -> int:
-    """Auto-close sessions that have no ended_at but started > PHANTOM_AGE_HOURS ago.
+    """Close any open DB sessions that are NOT the actively-tracked session.
 
-    Only closes stale sessions — not the currently active one.
+    Two layers:
+    1. If the in-memory tracker has an active session, keep that one open
+       and close every other open session immediately.
+    2. If the tracker has NO active session, close all open sessions that
+       are older than PHANTOM_AGE_HOURS (safety net).
     """
     sb = get_supabase_admin()
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=PHANTOM_AGE_HOURS)
 
     result = (
         sb.table("sessions")
-        .select("id, started_at, duration_mins")
+        .select("id, started_at, kwh_added, solar_kwh, duration_mins")
         .eq("user_id", user_id)
         .is_("ended_at", "null")
-        .lt("started_at", cutoff.isoformat())
+        .order("started_at", desc=True)
         .execute()
     )
+    open_sessions = result.data or []
+    if not open_sessions:
+        return 0
 
+    active_db_id = _get_active_tracker_session_id(user_id)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=PHANTOM_AGE_HOURS)
     closed = 0
-    for s in result.data or []:
-        try:
-            started = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
-            dur = s.get("duration_mins") or 60
-            ended = started + timedelta(minutes=dur)
-            sb.table("sessions").update({
-                "ended_at": ended.isoformat(),
-            }).eq("id", s["id"]).execute()
-            closed += 1
-            logger.info(f"[{user_id[:8]}] Auto-closed phantom session {s['id']} "
-                        f"(started {s['started_at']})")
-        except Exception as e:
-            logger.warning(f"[{user_id[:8]}] Failed to close phantom session {s['id']}: {e}")
+
+    for s in open_sessions:
+        sid = s["id"]
+        # Never close the actively-tracked session
+        if sid == active_db_id:
+            continue
+
+        started = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
+        # Close if: no active tracker at all, or session is stale by age
+        should_close = (active_db_id is None) or (started < cutoff)
+        # Also close if the tracker IS active but for a DIFFERENT session
+        # (this means this open row is orphaned)
+        if active_db_id is not None and sid != active_db_id:
+            should_close = True
+
+        if should_close:
+            try:
+                dur = s.get("duration_mins") or 0
+                ended = started + timedelta(minutes=dur) if dur > 0 else now
+                sb.table("sessions").update({
+                    "ended_at": ended.isoformat(),
+                }).eq("id", sid).execute()
+                closed += 1
+                logger.info(f"[{user_id[:8]}] Auto-closed phantom session {sid} "
+                            f"(started {s['started_at']})")
+            except Exception as e:
+                logger.warning(f"[{user_id[:8]}] Failed to close phantom session {sid}: {e}")
 
     return closed
 
@@ -70,6 +105,7 @@ async def list_sessions(
     sessions = get_sessions(user["id"], limit=limit, offset=offset)
 
     # Overlay live session tracker data onto the active session
+    active_db_id = _get_active_tracker_session_id(user["id"])
     try:
         from scheduler.control_loop import get_user_state
         state = get_user_state(user["id"])
@@ -88,6 +124,10 @@ async def list_sessions(
                     break
     except Exception as e:
         logger.warning(f"[{user['id'][:8]}] Failed to overlay live session data: {e}")
+
+    # Mark each session with is_live flag — only true if tracker confirms it
+    for s in sessions:
+        s["is_live"] = (not s.get("ended_at") and s["id"] == active_db_id)
 
     total = get_sessions_count(user["id"])
     return {"sessions": sessions, "count": len(sessions), "total": total, "offset": offset, "limit": limit}
