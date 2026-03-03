@@ -815,15 +815,15 @@ async def _control_tick(user_id: str) -> None:
                         if elapsed_h <= 0 or elapsed_h > 0.5:
                             continue
                         t_amps = cur_s.get("tesla_amps") or 0
-                        t_w = t_amps * 240.0
-                        if t_w <= 0:
+                        tesla_w = t_amps * 240.0
+                        if tesla_w <= 0:
                             continue
-                        recovered_kwh += t_w * elapsed_h / 1000.0
+                        recovered_kwh += tesla_w * elapsed_h / 1000.0
                         sol_w = cur_s.get("solar_w") or 0
                         hh_w = cur_s.get("household_w") or 0
-                        home_w = max(0, hh_w - t_w)
-                        sol_avail = max(0, sol_w - home_w)
-                        recovered_solar += min(t_w, sol_avail) * elapsed_h / 1000.0
+                        if hh_w > 0 and sol_w > 0:
+                            solar_to_tesla = sol_w * (tesla_w / hh_w)
+                            recovered_solar += min(sol_w, tesla_w, solar_to_tesla) * elapsed_h / 1000.0
                     recovered_solar = min(recovered_solar, recovered_kwh)
                     logger.info(
                         f"[{state.user_id[:8]}] Reconstructed from {len(snaps)} snapshots: "
@@ -947,7 +947,7 @@ def _estimate_solar_from_snapshots(
         hh_w = cur_s.get("household_w") or 0
         if hh_w > 0 and sol_w > 0:
             solar_to_tesla = sol_w * (tesla_w / hh_w)
-            solar_kwh += min(tesla_w, solar_to_tesla) * elapsed_h / 1000.0
+            solar_kwh += min(sol_w, tesla_w, solar_to_tesla) * elapsed_h / 1000.0
 
     # Cap solar to not exceed actual kwh_added
     solar_kwh = min(solar_kwh, kwh_added)
@@ -1052,7 +1052,7 @@ def _calc_solar_to_tesla_w(state: "UserLoopState") -> float:
     tesla_w = state.tesla.charging_kw * 1000
     if household_w <= 0 or tesla_w <= 0 or solar_w <= 0:
         return 0.0
-    return min(solar_w * (tesla_w / household_w), tesla_w)
+    return min(solar_w * (tesla_w / household_w), solar_w, tesla_w)
 
 
 def _calc_live_tesla_solar_pct(state: "UserLoopState") -> float:
