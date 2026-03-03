@@ -183,6 +183,17 @@ async def _fetch_data(state: UserLoopState) -> bool:
             state.settings["home_lon"] = str(home_lon)
             logger.info(f"[{state.user_id[:8]}] Auto-set home location from Tesla GPS: {home_lat}, {home_lon}")
 
+    # Auto-populate EV efficiency from Tessie if not manually set
+    if state.tesla and state.tesla.estimated_efficiency_wh_per_km:
+        current_ev_eff = state.settings.get("ev_efficiency_wh_per_km", "")
+        # Only auto-set if user still has the default (150) or hasn't set it
+        if not current_ev_eff or current_ev_eff == "150.0" or current_ev_eff == "150":
+            tessie_eff = str(state.tesla.estimated_efficiency_wh_per_km)
+            if tessie_eff != current_ev_eff:
+                upsert_user_setting(state.user_id, "ev_efficiency_wh_per_km", tessie_eff)
+                state.settings["ev_efficiency_wh_per_km"] = tessie_eff
+                logger.info(f"[{state.user_id[:8]}] Auto-set EV efficiency from Tessie: {tessie_eff} Wh/km")
+
     # Fetch weather (every 60 minutes)
     if now - state.last_weather_fetch > 3600 or state.forecast is None:
         try:

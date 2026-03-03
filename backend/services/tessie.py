@@ -33,12 +33,46 @@ class TeslaState:
         self.minutes_to_full_charge = int(charge.get("minutes_to_full_charge") or 0)
         self.time_to_full_charge = float(charge.get("time_to_full_charge") or 0.0)
 
+        # EPA rated range — used to derive EV efficiency
+        self.battery_range = float(charge.get("battery_range") or 0)  # miles
+        self.ideal_battery_range = float(charge.get("ideal_battery_range") or 0)  # miles
+
         # Charging power in kW
         self.charging_kw = (self.charger_actual_current * self.charger_voltage) / 1000.0
 
         # Location
         self.latitude = float(drive.get("latitude") or 0)
         self.longitude = float(drive.get("longitude") or 0)
+
+    @property
+    def estimated_efficiency_wh_per_km(self) -> float | None:
+        """Derive rated EV efficiency from EPA battery_range.
+
+        Tesla reports battery_range in rated miles for current SoC.
+        Full range = battery_range / (battery_level/100).
+        Efficiency ≈ usable_pack_kwh / full_range_km * 1000.
+        We approximate usable pack from ideal_battery_range if available.
+        Fallback: use EPA Wh/mi conversion (battery_range already factors this).
+        """
+        if self.battery_level <= 0 or self.battery_range <= 0:
+            return None
+        # Full EPA rated range in km
+        full_range_miles = self.battery_range / (self.battery_level / 100.0)
+        full_range_km = full_range_miles * 1.60934
+        if full_range_km <= 0:
+            return None
+        # Tesla EPA rating is ~250 Wh/mi for most models.
+        # rated_range * EPA_wh_per_mile = pack_kwh  →  wh/km = pack_kwh*1000 / range_km
+        # Simpler: EPA standard is battery_range(mi) = usable_kwh / (EPA_consumption_wh_per_mi / 1000)
+        # We use the known relationship: Wh/km ≈ usable_kwh * 1000 / full_range_km
+        # Approximate usable kWh from ideal_range (which uses a fixed 300Wh/mi for most Teslas)
+        if self.ideal_battery_range > 0:
+            full_ideal_miles = self.ideal_battery_range / (self.battery_level / 100.0)
+            usable_kwh = full_ideal_miles * 0.300  # ~300 Wh/mi ideal consumption
+        else:
+            # Fallback: use ~250 Wh/mi EPA consumption
+            usable_kwh = full_range_miles * 0.250
+        return round(usable_kwh * 1000.0 / full_range_km, 1)
 
     def to_dict(self) -> dict:
         return {
@@ -51,6 +85,8 @@ class TeslaState:
             "charge_limit_soc": self.charge_limit_soc,
             "latitude": self.latitude,
             "longitude": self.longitude,
+            "battery_range_miles": self.battery_range,
+            "estimated_efficiency_wh_per_km": self.estimated_efficiency_wh_per_km,
         }
 
 

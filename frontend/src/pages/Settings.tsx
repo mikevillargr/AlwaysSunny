@@ -111,6 +111,7 @@ export function Settings() {
   const [gasPricePerLiter, setGasPricePerLiter] = useState('65.0')
   const [iceEfficiency, setIceEfficiency] = useState('10.0')
   const [evEfficiency, setEvEfficiency] = useState('150')
+  const [tessieEvEfficiency, setTessieEvEfficiency] = useState<number | null>(null)
   const [savedFuel, setSavedFuel] = useState({ gas: '65.0', ice: '10.0', ev: '150' })
   const [fuelSaved, setFuelSaved] = useState(false)
   const fuelDirty =
@@ -350,6 +351,9 @@ export function Settings() {
             const v = String(data.ev_efficiency_wh_per_km)
             setEvEfficiency(v)
             setSavedFuel((prev) => ({ ...prev, ev: v }))
+          }
+          if (data.tessie_ev_efficiency_wh_per_km != null) {
+            setTessieEvEfficiency(data.tessie_ev_efficiency_wh_per_km)
           }
           // Notification prefs
           if (data.notif_grid_budget != null) setNotifGridBudget(data.notif_grid_budget)
@@ -682,25 +686,34 @@ export function Settings() {
             }}
             sx={{ width: 180 }}
           />
-          <TextField
-            label="EV Efficiency"
-            value={evEfficiency}
-            onChange={(e) => setEvEfficiency(e.target.value)}
-            type="number"
-            InputProps={{
-              endAdornment: (
-                <Typography variant="caption" color="text.secondary">
-                  Wh/km
-                </Typography>
-              ),
-            }}
-            sx={{ width: 180 }}
-          />
+          <Box>
+            <TextField
+              label="EV Efficiency"
+              value={evEfficiency}
+              onChange={(e) => setEvEfficiency(e.target.value)}
+              type="number"
+              InputProps={{
+                endAdornment: (
+                  <Typography variant="caption" color="text.secondary">
+                    Wh/km
+                  </Typography>
+                ),
+              }}
+              sx={{ width: 180 }}
+            />
+            {tessieEvEfficiency != null && (
+              <Typography variant="caption" color="#22c55e" sx={{ display: 'block', mt: 0.5 }}>
+                Tessie detected: {tessieEvEfficiency} Wh/km
+              </Typography>
+            )}
+          </Box>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="caption" color="text.secondary">
-            Defaults: 65 {currency}/L gas, 10 km/L ICE, 150 Wh/km EV (Model 3/Y average).
+            {tessieEvEfficiency
+              ? `EV efficiency auto-detected from your Tesla (${tessieEvEfficiency} Wh/km). Override only if needed.`
+              : 'Defaults: 65 ' + currency + '/L gas, 10 km/L ICE, 150 Wh/km EV (Model 3/Y average).'}
           </Typography>
           <Button
             variant="contained"

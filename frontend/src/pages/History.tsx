@@ -8,8 +8,9 @@ import {
   Collapse,
   CircularProgress,
   Divider,
+  Tooltip,
 } from '@mui/material'
-import { ChevronDown, ChevronUp, Battery, Sun, Zap, Activity } from 'lucide-react'
+import { ChevronDown, ChevronUp, Battery, Sun, Zap, Activity, Info } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 import type { SessionRecord } from '../types/api'
 import { getCurrencySymbol } from '../utils/currency'
@@ -50,7 +51,9 @@ function formatDate(iso: string | null): string {
   } catch { return '' }
 }
 
-function SessionCard({ session, currencySymbol }: { session: SessionRecord; currencySymbol: string }) {
+interface FuelSettings { gas: number; ice: number; ev: number; rate: number }
+
+function SessionCard({ session, currencySymbol, fuelSettings }: { session: SessionRecord; currencySymbol: string; fuelSettings: FuelSettings }) {
   const [expanded, setExpanded] = useState(false)
   const [details, setDetails] = useState<SessionDetails | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
@@ -59,6 +62,13 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
   const solar = session.solar_kwh ?? 0
   const grid = session.grid_kwh ?? 0
   const saved = session.saved_amount ?? 0
+  // Per-session EV vs Gas savings
+  const sessionKm = fuelSettings.ev > 0 ? (kwh * 1000) / fuelSettings.ev : 0
+  const sessionGasLiters = fuelSettings.ice > 0 ? sessionKm / fuelSettings.ice : 0
+  const sessionGasCost = sessionGasLiters * fuelSettings.gas
+  const sessionEvCost = kwh * fuelSettings.rate
+  const sessionEvVsGas = Math.max(0, sessionGasCost - sessionEvCost)
+  const sessionTotalSaved = saved + sessionEvVsGas
   const isActive = !session.ended_at
   const startedDate = new Date(session.started_at)
 
@@ -132,14 +142,16 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
               : formatDuration(session.duration_mins)}
           </Typography>
         </Box>
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography variant="h6" fontWeight="700" color="#22c55e">
-            {currencySymbol}{Math.round(saved).toLocaleString()}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Saved
-          </Typography>
-        </Box>
+        <Tooltip title="Solar Savings + EV vs Gas Savings for this session" arrow placement="left">
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="h6" fontWeight="700" color="#22c55e">
+              {currencySymbol}{Math.round(sessionTotalSaved).toLocaleString()}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Total Saved
+            </Typography>
+          </Box>
+        </Tooltip>
       </Box>
 
       <Box sx={{ mb: 1 }}>
@@ -210,12 +222,52 @@ function SessionCard({ session, currencySymbol }: { session: SessionRecord; curr
               </Typography>
             </Grid>
             <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Grid Cost Avoided
-              </Typography>
-              <Typography variant="body2" fontWeight="600" color="#22c55e">
-                {currencySymbol}{Math.round(saved).toLocaleString()}
-              </Typography>
+              <Tooltip title="Electricity cost avoided by using solar instead of grid" arrow>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Solar Savings
+                  </Typography>
+                  <Typography variant="body2" fontWeight="600" color="#f5c518">
+                    {currencySymbol}{Math.round(saved).toLocaleString()}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            </Grid>
+            <Grid item xs={6}>
+              <Tooltip title="How much cheaper EV charging was vs buying gasoline for the same distance" arrow>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    EV vs Gas Savings
+                  </Typography>
+                  <Typography variant="body2" fontWeight="600" color="#22c55e">
+                    {currencySymbol}{Math.round(sessionEvVsGas).toLocaleString()}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            </Grid>
+            <Grid item xs={6}>
+              <Tooltip title="Actual grid electricity cost for this session" arrow>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Charging Cost (Grid)
+                  </Typography>
+                  <Typography variant="body2" fontWeight="600" color="#3b82f6">
+                    {currencySymbol}{Math.round(grid * fuelSettings.rate).toLocaleString()}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            </Grid>
+            <Grid item xs={6}>
+              <Tooltip title="What this distance would have cost in gasoline" arrow>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Gas Equivalent
+                  </Typography>
+                  <Typography variant="body2" fontWeight="600" color="#ef4444">
+                    {currencySymbol}{Math.round(sessionGasCost).toLocaleString()}
+                  </Typography>
+                </Box>
+              </Tooltip>
             </Grid>
           </Grid>
 
@@ -402,14 +454,15 @@ export function History() {
   const gasEquivCost = gasLiters * fuelSettings.gas
   const evChargingCost = (totalKwh - totalSolarKwh) * fuelSettings.rate
   const evVsGasSaved = Math.max(0, gasEquivCost - totalKwh * fuelSettings.rate)
+  const combinedSavings = totalSaved + evVsGasSaved
 
   const summaryStats = [
-    { label: 'EV vs Gas Saved', value: `${currencySymbol}${Math.round(evVsGasSaved).toLocaleString()}`, color: '#22c55e' },
-    { label: 'Solar Saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#f5c518' },
-    { label: 'Charging Cost', value: `${currencySymbol}${Math.round(evChargingCost).toLocaleString()}`, color: '#3b82f6' },
-    { label: 'Avg Solar %', value: `${avgSubsidy}%`, color: '#f5c518' },
-    { label: 'Total Charged', value: `${totalKwh.toFixed(0)} kWh` },
-    { label: 'Sessions', value: `${total}` },
+    { label: 'Total Savings', value: `${currencySymbol}${Math.round(combinedSavings).toLocaleString()}`, color: '#22c55e', tooltip: 'Solar Savings + EV vs Gas Savings combined. The total amount you saved compared to driving a gas car and paying full grid rates.' },
+    { label: 'Solar Savings', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#f5c518', tooltip: 'Electricity cost avoided by charging from solar instead of the grid.' },
+    { label: 'EV vs Gas', value: `${currencySymbol}${Math.round(evVsGasSaved).toLocaleString()}`, color: '#22c55e', tooltip: 'How much cheaper EV charging was compared to buying gasoline for the same distance.' },
+    { label: 'Charging Cost', value: `${currencySymbol}${Math.round(evChargingCost).toLocaleString()}`, color: '#3b82f6', tooltip: 'Actual cost of grid electricity used for charging (excludes free solar kWh).' },
+    { label: 'Avg Solar %', value: `${avgSubsidy}%`, color: '#f5c518', tooltip: 'Average percentage of charging energy that came from solar across all sessions.' },
+    { label: 'Sessions', value: `${total}`, tooltip: 'Total completed charging sessions.' },
   ]
 
   return (
@@ -432,24 +485,36 @@ export function History() {
         sx={{ mb: 4 }}
       >
         {summaryStats.map((stat, index) => (
-          <Grid item xs={6} sm={3} md={2.5} key={index}>
-            <Card sx={{ p: 2, textAlign: 'center' }}>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ textTransform: 'uppercase' }}
-              >
-                {stat.label}
-              </Typography>
-              <Typography
-                variant="h5"
-                fontWeight="700"
-                color={stat.color || 'text.primary'}
-                sx={{ mt: 1 }}
-              >
-                {stat.value}
-              </Typography>
-            </Card>
+          <Grid item xs={6} sm={index === 0 ? 4 : 3} md={index === 0 ? 3 : 2} key={index}>
+            <Tooltip title={stat.tooltip || ''} arrow placement="top">
+              <Card sx={{
+                p: 2,
+                textAlign: 'center',
+                ...(index === 0 && {
+                  border: '1px solid rgba(34,197,94,0.3)',
+                  background: 'linear-gradient(135deg, rgba(34,197,94,0.06) 0%, transparent 100%)',
+                }),
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ textTransform: 'uppercase' }}
+                  >
+                    {stat.label}
+                  </Typography>
+                  <Info size={10} color="#4a6382" />
+                </Box>
+                <Typography
+                  variant={index === 0 ? 'h4' : 'h5'}
+                  fontWeight="700"
+                  color={stat.color || 'text.primary'}
+                  sx={{ mt: 0.5 }}
+                >
+                  {stat.value}
+                </Typography>
+              </Card>
+            </Tooltip>
           </Grid>
         ))}
       </Grid>
@@ -473,7 +538,7 @@ export function History() {
         ) : (
           <>
             {sessions.map((session) => (
-              <SessionCard key={session.id} session={session} currencySymbol={currencySymbol} />
+              <SessionCard key={session.id} session={session} currencySymbol={currencySymbol} fuelSettings={fuelSettings} />
             ))}
 
             {/* Pagination */}

@@ -199,6 +199,7 @@ class SettingsResponse(BaseModel):
     gas_price_per_liter: float = 65.0
     ice_efficiency_km_per_liter: float = 10.0
     ev_efficiency_wh_per_km: float = 150.0
+    tessie_ev_efficiency_wh_per_km: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------

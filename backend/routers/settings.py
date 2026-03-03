@@ -110,7 +110,16 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
 async def get_settings(user: dict = Depends(get_current_user)):
     """Get all settings for the authenticated user."""
     raw = get_user_settings(user["id"])
-    return _settings_dict_to_response(raw)
+    resp = _settings_dict_to_response(raw)
+    # Inject live Tessie-derived EV efficiency if available
+    try:
+        from scheduler.control_loop import get_user_state
+        state = get_user_state(user["id"])
+        if state and state.tesla and state.tesla.estimated_efficiency_wh_per_km:
+            resp.tessie_ev_efficiency_wh_per_km = state.tesla.estimated_efficiency_wh_per_km
+    except Exception:
+        pass
+    return resp
 
 
 @router.post("/settings", response_model=SettingsResponse)

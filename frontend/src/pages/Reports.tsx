@@ -7,6 +7,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   CircularProgress,
+  Tooltip,
 } from '@mui/material'
 import {
   BarChart,
@@ -23,7 +24,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { TrendingUp, Sun, Zap, Leaf, Fuel, Car, DollarSign } from 'lucide-react'
+import { TrendingUp, Sun, Zap, Leaf, Fuel, Car, DollarSign, Info } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 import { getCurrencySymbol } from '../utils/currency'
 
@@ -133,28 +134,40 @@ export function Reports() {
 
   const summaryCards = [
     {
-      label: 'EV vs Gas Savings',
-      value: `${currencySymbol}${data.ev_vs_gas_savings.toLocaleString()}`,
+      label: 'Total Savings',
+      value: `${currencySymbol}${data.total_savings.toLocaleString()}`,
       color: '#22c55e',
-      icon: <Car size={20} color="#22c55e" />,
+      icon: <TrendingUp size={20} color="#22c55e" />,
+      tooltip: 'Solar Savings + EV vs Gas Savings combined. The total you saved compared to driving a gas car and paying full grid rates.',
+      hero: true,
     },
     {
       label: 'Solar Savings',
       value: `${currencySymbol}${data.solar_savings.toLocaleString()}`,
       color: '#f5c518',
       icon: <Sun size={20} color="#f5c518" />,
+      tooltip: 'Electricity cost avoided by charging from solar instead of the grid.',
+    },
+    {
+      label: 'EV vs Gas',
+      value: `${currencySymbol}${data.ev_vs_gas_savings.toLocaleString()}`,
+      color: '#22c55e',
+      icon: <Car size={20} color="#22c55e" />,
+      tooltip: 'How much cheaper EV charging was compared to buying gasoline for the same distance.',
     },
     {
       label: 'Charging Cost',
       value: `${currencySymbol}${data.ev_charging_cost.toLocaleString()}`,
       color: '#3b82f6',
       icon: <Zap size={20} color="#3b82f6" />,
+      tooltip: 'Actual cost of grid electricity used for charging (excludes free solar kWh).',
     },
     {
       label: 'CO₂ Avoided',
       value: `${data.co2_avoided_kg.toLocaleString()} kg`,
       color: '#10b981',
       icon: <Leaf size={20} color="#10b981" />,
+      tooltip: 'Estimated CO₂ emissions avoided by not burning gasoline (2.31 kg CO₂ per liter).',
     },
   ]
 
@@ -194,16 +207,28 @@ export function Reports() {
       {/* Summary Cards */}
       <Grid container spacing={2} sx={{ mb: 4 }}>
         {summaryCards.map((card, i) => (
-          <Grid item xs={6} sm={3} key={i}>
-            <Card sx={{ p: 2.5, textAlign: 'center' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>{card.icon}</Box>
-              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                {card.label}
-              </Typography>
-              <Typography variant="h5" fontWeight="700" color={card.color} sx={{ mt: 0.5 }}>
-                {card.value}
-              </Typography>
-            </Card>
+          <Grid item xs={card.hero ? 12 : 6} sm={card.hero ? 12 : 3} key={i}>
+            <Tooltip title={card.tooltip || ''} arrow placement="top">
+              <Card sx={{
+                p: card.hero ? 3 : 2.5,
+                textAlign: 'center',
+                ...(card.hero && {
+                  border: '1px solid rgba(34,197,94,0.3)',
+                  background: 'linear-gradient(135deg, rgba(34,197,94,0.06) 0%, transparent 100%)',
+                }),
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                  {card.icon}
+                  <Info size={10} color="#4a6382" />
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {card.label}
+                </Typography>
+                <Typography variant={card.hero ? 'h3' : 'h5'} fontWeight="700" color={card.color} sx={{ mt: 0.5 }}>
+                  {card.value}
+                </Typography>
+              </Card>
+            </Tooltip>
           </Grid>
         ))}
       </Grid>
