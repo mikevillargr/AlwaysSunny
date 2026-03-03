@@ -182,7 +182,7 @@ def _period_start_iso(period: str, tz_name: str) -> str | None:
 
 @router.get("/sessions")
 async def list_sessions(
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     offset: int = Query(0, ge=0),
     period: str = Query("all"),
     user: dict = Depends(get_current_user),
