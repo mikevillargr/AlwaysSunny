@@ -907,6 +907,64 @@ async def _control_tick(user_id: str) -> None:
             _asyncio.create_task(_bg_tessie_reconcile())
 
 
+def _estimate_solar_from_snapshots(
+    user_id: str, started_at: str, ended_at: str, kwh_added: float, electricity_rate: float,
+) -> dict:
+    """Estimate solar_kwh for a session from Solax snapshots.
+
+    Uses the same proportional allocation as the live session tracker:
+        solar_to_tesla = solar_w × (tesla_w / household_w)
+    Accumulates tick-by-tick over the session time range.
+
+    Returns dict with solar_kwh, grid_kwh, solar_pct, saved_amount.
+    """
+    from services.supabase_client import get_session_snapshots
+    from datetime import datetime as _dt
+
+    snaps = get_session_snapshots(user_id, started_at, ended_at)
+    if len(snaps) < 2:
+        return {"solar_kwh": 0, "grid_kwh": 0, "solar_pct": 0, "saved_amount": 0,
+                "subsidy_calculation_method": "tessie_backfill"}
+
+    solar_kwh = 0.0
+    total_kwh = 0.0
+    for i in range(1, len(snaps)):
+        prev_s, cur_s = snaps[i - 1], snaps[i]
+        try:
+            t0 = _dt.fromisoformat(prev_s["timestamp"].replace("Z", "+00:00"))
+            t1 = _dt.fromisoformat(cur_s["timestamp"].replace("Z", "+00:00"))
+            elapsed_h = (t1 - t0).total_seconds() / 3600.0
+        except (ValueError, TypeError):
+            continue
+        if elapsed_h <= 0 or elapsed_h > 0.5:
+            continue
+        t_amps = cur_s.get("tesla_amps") or 0
+        tesla_w = t_amps * 240.0
+        if tesla_w <= 0:
+            continue
+        total_kwh += tesla_w * elapsed_h / 1000.0
+        sol_w = cur_s.get("solar_w") or 0
+        hh_w = cur_s.get("household_w") or 0
+        if hh_w > 0 and sol_w > 0:
+            solar_to_tesla = sol_w * (tesla_w / hh_w)
+            solar_kwh += min(tesla_w, solar_to_tesla) * elapsed_h / 1000.0
+
+    # Cap solar to not exceed actual kwh_added
+    solar_kwh = min(solar_kwh, kwh_added)
+    solar_pct = round((solar_kwh / kwh_added) * 100, 1) if kwh_added > 0 else 0
+    grid_kwh = max(0, kwh_added - solar_kwh)
+    saved_amount = round(solar_kwh * electricity_rate, 2)
+    method = "snapshot_estimated" if len(snaps) >= 2 else "tessie_backfill"
+
+    return {
+        "solar_kwh": round(solar_kwh, 2),
+        "grid_kwh": round(grid_kwh, 2),
+        "solar_pct": solar_pct,
+        "saved_amount": saved_amount,
+        "subsidy_calculation_method": method,
+    }
+
+
 async def _reconcile_tessie_charges(
     user_id: str, api_key: str, vin: str, electricity_rate: float
 ) -> None:
@@ -946,6 +1004,14 @@ async def _reconcile_tessie_charges(
 
         tc_end = _dt.fromtimestamp(tc["ended_at"], tz=_tz.utc) if tc.get("ended_at") else None
         duration_mins = round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else 0
+
+        # Estimate solar from snapshots if we have data for this time range
+        solar_est = _estimate_solar_from_snapshots(
+            user_id, tc_start.isoformat(),
+            tc_end.isoformat() if tc_end else tc_start.isoformat(),
+            tc_kwh, electricity_rate,
+        )
+
         sb.table("sessions").insert({
             "user_id": user_id,
             "started_at": tc_start.isoformat(),
@@ -956,8 +1022,7 @@ async def _reconcile_tessie_charges(
             "end_soc": tc.get("ending_battery", 0),
             "target_soc": tc.get("ending_battery", 80),
             "electricity_rate": electricity_rate,
-            "solar_kwh": 0, "solar_pct": 0, "grid_kwh": 0, "saved_amount": 0,
-            "subsidy_calculation_method": "tessie_backfill",
+            **solar_est,
         }).execute()
         backfilled += 1
 

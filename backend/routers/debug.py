@@ -625,6 +625,15 @@ async def backfill_from_tessie(
 
         # Create session record from Tessie data
         duration_mins = round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else 0
+
+        # Estimate solar from Solax snapshots if available
+        from scheduler.control_loop import _estimate_solar_from_snapshots
+        solar_est = _estimate_solar_from_snapshots(
+            user_id, tc_start.isoformat(),
+            tc_end.isoformat() if tc_end else tc_start.isoformat(),
+            tc_kwh, electricity_rate,
+        )
+
         session_data = {
             "user_id": user_id,
             "started_at": tc_start.isoformat(),
@@ -635,12 +644,7 @@ async def backfill_from_tessie(
             "end_soc": tc.get("ending_battery", 0),
             "target_soc": tc.get("ending_battery", 80),
             "electricity_rate": electricity_rate,
-            # Solar data unavailable from Tessie — mark as backfilled
-            "solar_kwh": 0,
-            "solar_pct": 0,
-            "grid_kwh": 0,
-            "saved_amount": 0,
-            "subsidy_calculation_method": "tessie_backfill",
+            **solar_est,
         }
         try:
             sb.table("sessions").insert(session_data).execute()
