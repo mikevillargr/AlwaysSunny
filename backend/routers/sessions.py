@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from middleware.auth import get_current_user
 from services.supabase_client import (
     get_sessions, get_sessions_count, get_active_session, get_session_snapshots,
-    get_supabase_admin, close_open_sessions,
+    get_supabase_admin, close_open_sessions, get_user_settings,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,20 +32,74 @@ def _get_active_tracker_session_id(user_id: str) -> int | None:
     return None
 
 
+def _reconstruct_from_snapshots(user_id: str, started_at: str, electricity_rate: float) -> dict:
+    """Reconstruct session stats from snapshots when the tracker failed to write them.
+
+    Returns a dict of fields to update on the session row, or empty dict if
+    no usable snapshots exist.
+    """
+    sb = get_supabase_admin()
+    snaps = (
+        sb.table("snapshots")
+        .select("solar_w, grid_w, tesla_soc, tesla_amps, timestamp")
+        .eq("user_id", user_id)
+        .gte("timestamp", started_at)
+        .order("timestamp")
+        .execute()
+    ).data or []
+
+    charging = [s for s in snaps if (s.get("tesla_amps") or 0) > 0]
+    if not charging:
+        return {}
+
+    n = len(charging)
+    socs = [s["tesla_soc"] for s in snaps if s.get("tesla_soc")]
+    soc_end = max(socs) if socs else None
+
+    avg_amps = sum(s.get("tesla_amps", 0) for s in charging) / n
+    avg_kw = avg_amps * 230 / 1000  # L2 charging ~230V
+    duration_hrs = n / 60.0  # ~1 snapshot per minute
+    kwh_added = round(avg_kw * duration_hrs, 2)
+
+    total_solar_w = sum(s.get("solar_w", 0) for s in charging)
+    total_grid_w = sum(s.get("grid_w", 0) for s in charging)
+    total_power = total_solar_w + total_grid_w
+    solar_frac = total_solar_w / total_power if total_power > 0 else 0
+    solar_kwh = round(kwh_added * solar_frac, 2)
+    grid_kwh = round(kwh_added - solar_kwh, 2)
+    solar_pct = round(solar_frac * 100, 1)
+    saved = round(solar_kwh * electricity_rate, 2)
+
+    last_ts = charging[-1].get("timestamp", "")
+
+    return {
+        "kwh_added": kwh_added,
+        "solar_kwh": solar_kwh,
+        "grid_kwh": grid_kwh,
+        "solar_pct": solar_pct,
+        "saved_amount": saved,
+        "end_soc": soc_end,
+        "duration_mins": round(duration_hrs * 60),
+        "_last_charging_ts": last_ts,
+    }
+
+
 def _close_phantom_sessions(user_id: str) -> int:
     """Close any open DB sessions that are NOT the actively-tracked session.
 
     Two layers:
     1. If the in-memory tracker has an active session, keep that one open
        and close every other open session immediately.
-    2. If the tracker has NO active session, close all open sessions that
-       are older than PHANTOM_AGE_HOURS (safety net).
+    2. If the tracker has NO active session, close all open sessions.
+
+    When closing, if the session has null stats, reconstruct from snapshots
+    so no charging data is ever lost.
     """
     sb = get_supabase_admin()
 
     result = (
         sb.table("sessions")
-        .select("id, started_at, kwh_added, solar_kwh, duration_mins")
+        .select("id, started_at, kwh_added, solar_kwh, duration_mins, electricity_rate")
         .eq("user_id", user_id)
         .is_("ended_at", "null")
         .order("started_at", desc=True)
@@ -57,7 +111,6 @@ def _close_phantom_sessions(user_id: str) -> int:
 
     active_db_id = _get_active_tracker_session_id(user_id)
     now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(hours=PHANTOM_AGE_HOURS)
     closed = 0
 
     for s in open_sessions:
@@ -66,34 +119,72 @@ def _close_phantom_sessions(user_id: str) -> int:
         if sid == active_db_id:
             continue
 
+        # Any non-tracked open session should be closed
         started = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
-        # Close if: no active tracker at all, or session is stale by age
-        should_close = (active_db_id is None) or (started < cutoff)
-        # Also close if the tracker IS active but for a DIFFERENT session
-        # (this means this open row is orphaned)
-        if active_db_id is not None and sid != active_db_id:
-            should_close = True
 
-        if should_close:
-            try:
+        try:
+            update: dict = {}
+            # If session has no stats, reconstruct from snapshots
+            if not s.get("kwh_added"):
+                rate = float(s.get("electricity_rate") or 10.83)
+                reconstructed = _reconstruct_from_snapshots(user_id, s["started_at"], rate)
+                if reconstructed:
+                    last_ts = reconstructed.pop("_last_charging_ts", "")
+                    update.update(reconstructed)
+                    # Use last charging snapshot as ended_at (more accurate)
+                    if last_ts:
+                        update["ended_at"] = last_ts
+                    else:
+                        update["ended_at"] = now.isoformat()
+                    logger.info(
+                        f"[{user_id[:8]}] Reconstructed phantom session {sid}: "
+                        f"kwh={reconstructed.get('kwh_added')} solar_pct={reconstructed.get('solar_pct')}%"
+                    )
+                else:
+                    update["ended_at"] = now.isoformat()
+            else:
                 dur = s.get("duration_mins") or 0
                 ended = started + timedelta(minutes=dur) if dur > 0 else now
-                sb.table("sessions").update({
-                    "ended_at": ended.isoformat(),
-                }).eq("id", sid).execute()
-                closed += 1
-                logger.info(f"[{user_id[:8]}] Auto-closed phantom session {sid} "
-                            f"(started {s['started_at']})")
-            except Exception as e:
-                logger.warning(f"[{user_id[:8]}] Failed to close phantom session {sid}: {e}")
+                update["ended_at"] = ended.isoformat()
+
+            sb.table("sessions").update(update).eq("id", sid).execute()
+            closed += 1
+            logger.info(f"[{user_id[:8]}] Auto-closed phantom session {sid} "
+                        f"(started {s['started_at']})")
+        except Exception as e:
+            logger.warning(f"[{user_id[:8]}] Failed to close phantom session {sid}: {e}")
 
     return closed
+
+
+def _period_start_iso(period: str, tz_name: str) -> str | None:
+    """Return UTC ISO-8601 start string for the given period filter."""
+    if not period or period == "all":
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        local_now = datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        local_now = datetime.now(timezone.utc)
+
+    if period == "week":
+        start = (local_now - timedelta(days=local_now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    elif period == "month":
+        start = local_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == "year":
+        start = local_now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        return None
+    return start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
 @router.get("/sessions")
 async def list_sessions(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    period: str = Query("all"),
     user: dict = Depends(get_current_user),
 ):
     """Get session history for the authenticated user.
@@ -102,7 +193,10 @@ async def list_sessions(
     in-memory session tracker so the History page mirrors the dashboard.
     """
     _close_phantom_sessions(user["id"])
-    sessions = get_sessions(user["id"], limit=limit, offset=offset)
+    settings = get_user_settings(user["id"])
+    tz_name = settings.get("timezone", "Asia/Manila")
+    started_after = _period_start_iso(period, tz_name)
+    sessions = get_sessions(user["id"], limit=limit, offset=offset, started_after=started_after)
 
     # Overlay live session tracker data onto the active session
     active_db_id = _get_active_tracker_session_id(user["id"])
@@ -129,7 +223,7 @@ async def list_sessions(
     for s in sessions:
         s["is_live"] = (not s.get("ended_at") and s["id"] == active_db_id)
 
-    total = get_sessions_count(user["id"])
+    total = get_sessions_count(user["id"], started_after=started_after)
     return {"sessions": sessions, "count": len(sessions), "total": total, "offset": offset, "limit": limit}
 
 

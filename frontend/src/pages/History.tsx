@@ -9,6 +9,8 @@ import {
   CircularProgress,
   Divider,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material'
 import { ChevronDown, ChevronUp, Battery, Sun, Zap, Activity, Info } from 'lucide-react'
 import { apiFetch } from '../lib/api'
@@ -379,6 +381,7 @@ export function History() {
   const [currencySymbol, setCurrencySymbol] = useState('₱')
   const [allSessions, setAllSessions] = useState<SessionRecord[]>([])
   const [fuelSettings, setFuelSettings] = useState({ gas: 65.0, ice: 10.0, ev: 150, rate: 10.83 })
+  const [period, setPeriod] = useState<string>('all')
 
   useEffect(() => {
     async function fetchSettings() {
@@ -400,33 +403,33 @@ export function History() {
     fetchSettings()
   }, [])
 
-  // Fetch summary stats once (all sessions, large limit)
+  // Fetch summary stats (all sessions for the selected period)
   useEffect(() => {
     ;(async () => {
       try {
-        const res = await apiFetch('/api/sessions?limit=100&offset=0')
+        const res = await apiFetch(`/api/sessions?limit=500&offset=0&period=${period}`)
         if (res.ok) {
           const data = await res.json()
-          const valid = (data.sessions || []).filter((s: SessionRecord) =>
-            (s.kwh_added && s.kwh_added > 0) || !s.ended_at
-          )
-          setAllSessions(valid)
+          setAllSessions(data.sessions || [])
         }
       } catch { /* ignore */ }
     })()
-  }, [])
+  }, [period])
+
+  // Reset page when period changes
+  useEffect(() => { setPage(0) }, [period])
 
   // Fetch paginated sessions
   useEffect(() => {
     ;(async () => {
+      setLoading(true)
       try {
-        setLoading(true)
         const offset = page * PAGE_SIZE
-        const res = await apiFetch(`/api/sessions?limit=${PAGE_SIZE}&offset=${offset}`)
+        const res = await apiFetch(`/api/sessions?limit=${PAGE_SIZE}&offset=${offset}&period=${period}`)
         if (res.ok) {
           const data = await res.json()
           const valid = (data.sessions || []).filter((s: SessionRecord) =>
-            (s.kwh_added && s.kwh_added > 0) || !s.ended_at
+            (s.kwh_added && s.kwh_added > 0) || s.is_live
           )
           setSessions(valid)
           setTotal(data.total || 0)
@@ -437,7 +440,7 @@ export function History() {
         setLoading(false)
       }
     })()
-  }, [page])
+  }, [page, period])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
@@ -473,9 +476,34 @@ export function History() {
         p: { xs: 2, md: 3 },
       }}
     >
-      <Typography variant="h4" fontWeight="700" sx={{ mb: 3 }}>
-        Session History
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+        <Typography variant="h4" fontWeight="700">
+          Session History
+        </Typography>
+        <ToggleButtonGroup
+          value={period}
+          exclusive
+          onChange={(_, v) => v && setPeriod(v)}
+          size="small"
+          sx={{
+            '& .MuiToggleButton-root': {
+              color: '#8da4be',
+              borderColor: '#2a3f57',
+              px: 1.5,
+              '&.Mui-selected': {
+                color: '#22c55e',
+                bgcolor: 'rgba(34,197,94,0.08)',
+                borderColor: 'rgba(34,197,94,0.3)',
+              },
+            },
+          }}
+        >
+          <ToggleButton value="week">Week</ToggleButton>
+          <ToggleButton value="month">Month</ToggleButton>
+          <ToggleButton value="year">Year</ToggleButton>
+          <ToggleButton value="all">All</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
       {/* Summary Stats */}
       <Grid container spacing={1.5} sx={{ mb: 4 }}>

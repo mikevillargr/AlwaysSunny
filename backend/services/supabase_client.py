@@ -124,13 +124,18 @@ def end_session(session_id: int, final_data: dict) -> dict:
     return result.data[0] if result.data else {}
 
 
-def get_sessions(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
+def get_sessions(user_id: str, limit: int = 20, offset: int = 0, started_after: str | None = None) -> list[dict]:
     """Fetch session history for a user, newest first."""
     sb = get_supabase_admin()
-    result = (
+    query = (
         sb.table("sessions")
         .select("*")
         .eq("user_id", user_id)
+    )
+    if started_after:
+        query = query.gte("started_at", started_after)
+    result = (
+        query
         .order("started_at", desc=True)
         .range(offset, offset + limit - 1)
         .execute()
@@ -138,15 +143,17 @@ def get_sessions(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
     return result.data
 
 
-def get_sessions_count(user_id: str) -> int:
+def get_sessions_count(user_id: str, started_after: str | None = None) -> int:
     """Get total session count for a user."""
     sb = get_supabase_admin()
-    result = (
+    query = (
         sb.table("sessions")
         .select("id", count="exact")
         .eq("user_id", user_id)
-        .execute()
     )
+    if started_after:
+        query = query.gte("started_at", started_after)
+    result = query.execute()
     return result.count or 0
 
 
