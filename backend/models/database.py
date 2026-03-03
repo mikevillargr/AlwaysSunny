@@ -157,6 +157,10 @@ class SettingsUpdate(BaseModel):
     ai_fallback_model: Optional[str] = None
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    # Vehicle & fuel comparison
+    gas_price_per_liter: Optional[float] = None
+    ice_efficiency_km_per_liter: Optional[float] = None
+    ev_efficiency_wh_per_km: Optional[float] = None
 
 
 class SettingsResponse(BaseModel):
@@ -191,6 +195,10 @@ class SettingsResponse(BaseModel):
     ai_fallback_model: Optional[str] = None
     openai_api_key_set: bool = False
     anthropic_api_key_set: bool = False
+    # Vehicle & fuel comparison
+    gas_price_per_liter: float = 65.0
+    ice_efficiency_km_per_liter: float = 10.0
+    ev_efficiency_wh_per_km: float = 150.0
 
 
 # ---------------------------------------------------------------------------

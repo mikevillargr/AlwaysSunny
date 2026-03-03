@@ -23,6 +23,7 @@ import {
   Zap,
   LayoutDashboard,
   History as HistoryIcon,
+  TrendingUp,
   Settings as SettingsIcon,
   Menu as MenuIcon,
   X,
@@ -32,6 +33,7 @@ import {
 import { useAuth } from './contexts/AuthContext'
 import { Dashboard } from './pages/Dashboard'
 import { History } from './pages/History'
+import { Reports } from './pages/Reports'
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
 import { Admin } from './pages/Admin'
@@ -117,6 +119,10 @@ export function App() {
     {
       label: 'History',
       icon: <HistoryIcon size={20} />,
+    },
+    {
+      label: 'Reports',
+      icon: <TrendingUp size={20} />,
     },
     {
       label: 'Settings',
@@ -208,6 +214,11 @@ export function App() {
               <Tab
                 icon={<HistoryIcon size={20} />}
                 label="History"
+                iconPosition="start"
+              />
+              <Tab
+                icon={<TrendingUp size={20} />}
+                label="Reports"
                 iconPosition="start"
               />
               <Tab
@@ -363,8 +374,9 @@ export function App() {
         >
           {activeTab === 0 && <Dashboard />}
           {activeTab === 1 && <History />}
-          {activeTab === 2 && <Settings />}
-          {activeTab === 3 && isAdmin && <Admin />}
+          {activeTab === 2 && <Reports />}
+          {activeTab === 3 && <Settings />}
+          {activeTab === 4 && isAdmin && <Admin />}
         </Box>
       </Box>
     </ThemeProvider>

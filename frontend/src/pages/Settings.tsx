@@ -107,6 +107,34 @@ export function Settings() {
     setTimeout(() => setNotifSaved(false), 2500)
   }
 
+  // Vehicle & Fuel state
+  const [gasPricePerLiter, setGasPricePerLiter] = useState('65.0')
+  const [iceEfficiency, setIceEfficiency] = useState('10.0')
+  const [evEfficiency, setEvEfficiency] = useState('150')
+  const [savedFuel, setSavedFuel] = useState({ gas: '65.0', ice: '10.0', ev: '150' })
+  const [fuelSaved, setFuelSaved] = useState(false)
+  const fuelDirty =
+    gasPricePerLiter !== savedFuel.gas ||
+    iceEfficiency !== savedFuel.ice ||
+    evEfficiency !== savedFuel.ev
+  const handleSaveFuel = async () => {
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          gas_price_per_liter: parseFloat(gasPricePerLiter) || 65.0,
+          ice_efficiency_km_per_liter: parseFloat(iceEfficiency) || 10.0,
+          ev_efficiency_wh_per_km: parseFloat(evEfficiency) || 150,
+        }),
+      })
+    } catch (e) {
+      console.warn('[Settings] Failed to save fuel settings:', e)
+    }
+    setSavedFuel({ gas: gasPricePerLiter, ice: iceEfficiency, ev: evEfficiency })
+    setFuelSaved(true)
+    setTimeout(() => setFuelSaved(false), 2500)
+  }
+
   // Inverter / Solar Setup state
   const [panelCapacityW, setPanelCapacityW] = useState('0')
   const [hasHomeBattery, setHasHomeBattery] = useState(false)
@@ -306,6 +334,22 @@ export function Settings() {
           if (data.has_net_metering != null) {
             setHasNetMetering(data.has_net_metering)
             setSavedInverter((prev) => ({ ...prev, hasNetMetering: data.has_net_metering }))
+          }
+          // Vehicle & fuel settings
+          if (data.gas_price_per_liter != null) {
+            const v = String(data.gas_price_per_liter)
+            setGasPricePerLiter(v)
+            setSavedFuel((prev) => ({ ...prev, gas: v }))
+          }
+          if (data.ice_efficiency_km_per_liter != null) {
+            const v = String(data.ice_efficiency_km_per_liter)
+            setIceEfficiency(v)
+            setSavedFuel((prev) => ({ ...prev, ice: v }))
+          }
+          if (data.ev_efficiency_wh_per_km != null) {
+            const v = String(data.ev_efficiency_wh_per_km)
+            setEvEfficiency(v)
+            setSavedFuel((prev) => ({ ...prev, ev: v }))
           }
           // Notification prefs
           if (data.notif_grid_budget != null) setNotifGridBudget(data.notif_grid_budget)
@@ -574,6 +618,96 @@ export function Settings() {
               opacity: tariffDirty ? 1 : 0.4,
               transition: 'opacity 0.2s',
             }}
+          >
+            Save
+          </Button>
+        </Box>
+      </Card>
+
+      {/* Vehicle & Fuel Comparison */}
+      <Card sx={{ p: 3, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Car size={18} color="#22c55e" />
+            <Typography variant="h6" fontWeight="600">
+              Vehicle & Fuel Comparison
+            </Typography>
+          </Box>
+          <Fade in={fuelSaved}>
+            <Chip
+              icon={<Check size={14} />}
+              label="Saved"
+              size="small"
+              sx={{
+                bgcolor: 'rgba(34,197,94,0.12)',
+                color: '#22c55e',
+                border: '1px solid rgba(34,197,94,0.3)',
+                fontWeight: 600,
+                '& .MuiChip-icon': { color: '#22c55e' },
+              }}
+            />
+          </Fade>
+        </Box>
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Used to calculate how much you save by charging your EV compared to driving a gasoline vehicle.
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+          <TextField
+            label="Gas Price"
+            value={gasPricePerLiter}
+            onChange={(e) => setGasPricePerLiter(e.target.value)}
+            type="number"
+            InputProps={{
+              endAdornment: (
+                <Typography variant="caption" color="text.secondary">
+                  {currency}/L
+                </Typography>
+              ),
+            }}
+            sx={{ width: 180 }}
+          />
+          <TextField
+            label="ICE Fuel Economy"
+            value={iceEfficiency}
+            onChange={(e) => setIceEfficiency(e.target.value)}
+            type="number"
+            InputProps={{
+              endAdornment: (
+                <Typography variant="caption" color="text.secondary">
+                  km/L
+                </Typography>
+              ),
+            }}
+            sx={{ width: 180 }}
+          />
+          <TextField
+            label="EV Efficiency"
+            value={evEfficiency}
+            onChange={(e) => setEvEfficiency(e.target.value)}
+            type="number"
+            InputProps={{
+              endAdornment: (
+                <Typography variant="caption" color="text.secondary">
+                  Wh/km
+                </Typography>
+              ),
+            }}
+            sx={{ width: 180 }}
+          />
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="caption" color="text.secondary">
+            Defaults: 65 {currency}/L gas, 10 km/L ICE, 150 Wh/km EV (Model 3/Y average).
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            disabled={!fuelDirty}
+            onClick={handleSaveFuel}
+            sx={{ ml: 2, flexShrink: 0, opacity: fuelDirty ? 1 : 0.4, transition: 'opacity 0.2s' }}
           >
             Save
           </Button>

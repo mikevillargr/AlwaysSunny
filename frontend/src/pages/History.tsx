@@ -326,6 +326,7 @@ export function History() {
   const [loading, setLoading] = useState(true)
   const [currencySymbol, setCurrencySymbol] = useState('₱')
   const [allSessions, setAllSessions] = useState<SessionRecord[]>([])
+  const [fuelSettings, setFuelSettings] = useState({ gas: 65.0, ice: 10.0, ev: 150, rate: 10.83 })
 
   useEffect(() => {
     async function fetchSettings() {
@@ -335,6 +336,12 @@ export function History() {
           const data = await res.json()
           const code = data.currency_code || 'PHP'
           setCurrencySymbol(getCurrencySymbol(code))
+          setFuelSettings({
+            gas: data.gas_price_per_liter ?? 65.0,
+            ice: data.ice_efficiency_km_per_liter ?? 10.0,
+            ev: data.ev_efficiency_wh_per_km ?? 150,
+            rate: data.electricity_rate ?? 10.83,
+          })
         }
       } catch { /* use default */ }
     }
@@ -389,11 +396,20 @@ export function History() {
   const totalKwh = completed.reduce((sum, s) => sum + (s.kwh_added ?? 0), 0)
   const avgSubsidy = totalKwh > 0 ? Math.round((totalSolarKwh / totalKwh) * 100) : 0
 
+  // EV vs Gas savings
+  const kmDriven = fuelSettings.ev > 0 ? (totalKwh * 1000) / fuelSettings.ev : 0
+  const gasLiters = fuelSettings.ice > 0 ? kmDriven / fuelSettings.ice : 0
+  const gasEquivCost = gasLiters * fuelSettings.gas
+  const evChargingCost = (totalKwh - totalSolarKwh) * fuelSettings.rate
+  const evVsGasSaved = Math.max(0, gasEquivCost - totalKwh * fuelSettings.rate)
+
   const summaryStats = [
-    { label: 'Total solar charged', value: `${totalSolarKwh.toFixed(0)} kWh` },
-    { label: 'Total saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#22c55e' },
-    { label: 'Avg Tesla solar %', value: `${avgSubsidy}%`, color: '#f5c518' },
-    { label: 'Total sessions', value: `${total}` },
+    { label: 'EV vs Gas Saved', value: `${currencySymbol}${Math.round(evVsGasSaved).toLocaleString()}`, color: '#22c55e' },
+    { label: 'Solar Saved', value: `${currencySymbol}${Math.round(totalSaved).toLocaleString()}`, color: '#f5c518' },
+    { label: 'Charging Cost', value: `${currencySymbol}${Math.round(evChargingCost).toLocaleString()}`, color: '#3b82f6' },
+    { label: 'Avg Solar %', value: `${avgSubsidy}%`, color: '#f5c518' },
+    { label: 'Total Charged', value: `${totalKwh.toFixed(0)} kWh` },
+    { label: 'Sessions', value: `${total}` },
   ]
 
   return (

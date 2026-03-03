@@ -46,6 +46,9 @@ DEFAULTS = {
     "has_home_battery": "false",
     "has_net_metering": "false",
     "currency_code": "PHP",
+    "gas_price_per_liter": "65.0",
+    "ice_efficiency_km_per_liter": "10.0",
+    "ev_efficiency_wh_per_km": "150.0",
 }
 
 
@@ -97,6 +100,9 @@ def _settings_dict_to_response(raw: dict) -> SettingsResponse:
         ai_fallback_model=merged.get("ai_fallback_model") or None,
         openai_api_key_set=bool(merged.get("openai_api_key", "")),
         anthropic_api_key_set=bool(merged.get("anthropic_api_key", "")),
+        gas_price_per_liter=float(merged.get("gas_price_per_liter", 65.0)),
+        ice_efficiency_km_per_liter=float(merged.get("ice_efficiency_km_per_liter", 10.0)),
+        ev_efficiency_wh_per_km=float(merged.get("ev_efficiency_wh_per_km", 150.0)),
     )
 
 
