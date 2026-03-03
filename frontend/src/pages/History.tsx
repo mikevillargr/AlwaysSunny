@@ -374,7 +374,6 @@ function SessionCard({ session, currencySymbol, fuelSettings }: { session: Sessi
 const PAGE_SIZE = 10
 
 export function History() {
-  const [sessions, setSessions] = useState<SessionRecord[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -403,36 +402,17 @@ export function History() {
     fetchSettings()
   }, [])
 
-  // Fetch summary stats (all sessions for the selected period)
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const res = await apiFetch(`/api/sessions?limit=500&offset=0&period=${period}`)
-        if (res.ok) {
-          const data = await res.json()
-          setAllSessions(data.sessions || [])
-        }
-      } catch { /* ignore */ }
-    })()
-  }, [period])
-
-  // Reset page when period changes
-  useEffect(() => { setPage(0) }, [period])
-
-  // Fetch paginated sessions
+  // Fetch all sessions for the selected period (one request, no race condition)
   useEffect(() => {
     ;(async () => {
       setLoading(true)
       try {
-        const offset = page * PAGE_SIZE
-        const res = await apiFetch(`/api/sessions?limit=${PAGE_SIZE}&offset=${offset}&period=${period}`)
+        const res = await apiFetch(`/api/sessions?limit=500&offset=0&period=${period}`)
         if (res.ok) {
           const data = await res.json()
-          const valid = (data.sessions || []).filter((s: SessionRecord) =>
-            (s.kwh_added && s.kwh_added > 0) || s.is_live
-          )
-          setSessions(valid)
-          setTotal(data.total || 0)
+          const all = (data.sessions || []) as SessionRecord[]
+          setAllSessions(all)
+          setTotal(data.total || all.length)
         }
       } catch (e) {
         console.warn('[History] Failed to fetch sessions:', e)
@@ -440,9 +420,13 @@ export function History() {
         setLoading(false)
       }
     })()
-  }, [page, period])
+    setPage(0)
+  }, [period])
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  // Derive paginated view from allSessions (client-side)
+  const displayable = allSessions.filter((s) => (s.kwh_added && s.kwh_added > 0) || s.is_live)
+  const totalPages = Math.ceil(displayable.length / PAGE_SIZE)
+  const paginatedSessions = displayable.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   // Compute summary stats from all sessions (not just current page)
   const completed = allSessions.filter((s) => s.ended_at && s.kwh_added && s.kwh_added > 0)
@@ -549,7 +533,7 @@ export function History() {
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
             <CircularProgress size={32} />
           </Box>
-        ) : sessions.length === 0 ? (
+        ) : paginatedSessions.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <Battery size={40} color="#4a6382" />
             <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
@@ -561,7 +545,7 @@ export function History() {
           </Box>
         ) : (
           <>
-            {sessions.map((session) => (
+            {paginatedSessions.map((session) => (
               <SessionCard key={session.id} session={session} currencySymbol={currencySymbol} fuelSettings={fuelSettings} />
             ))}
 
