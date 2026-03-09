@@ -651,14 +651,7 @@ async def _control_tick(user_id: str) -> None:
     current_amps = tesla.charger_actual_current
 
     if final_amps is None:
-        # If both grid budget and grid import limit are disabled (0),
-        # don't throttle — let Tesla charge at whatever it's doing.
-        if grid_budget <= 0 and grid_import_limit_w <= 0:
-            state.mode = "Charging – No Limits"
-            final_amps = -1  # sentinel: don't send any command
-            logger.debug(f"[{state.user_id[:8]}] No budget/limit set — not interfering")
-
-        elif charging_strategy == "solar":
+        if charging_strategy == "solar":
             # === SOLAR-FIRST STRATEGY ===
             # Only charge from solar surplus. Pause when no surplus.
             # Home demand = household minus Tesla (Solax includes Tesla in household)
@@ -686,7 +679,15 @@ async def _control_tick(user_id: str) -> None:
                 target_amps = 0  # Solar-first: pause, don't trickle
 
             final_amps = target_amps
-            state.mode = "Solar-first" if final_amps >= 5 else "Solar-first – Waiting"
+            
+            # Set mode with grid limit messaging
+            if grid_import_limit_w > 0 and solax.grid_import_w > grid_import_limit_w:
+                state.mode = f"Solar-first – Grid Limited ({int(grid_import_limit_w/1000)}kW)"
+            elif final_amps >= 5:
+                state.mode = "Solar-first"
+            else:
+                state.mode = "Solar-first – Waiting"
+            
             logger.debug(
                 f"[{state.user_id[:8]}] Solar-first: surplus={solar_surplus_w:.0f}W → {final_amps}A"
             )
@@ -735,15 +736,8 @@ async def _control_tick(user_id: str) -> None:
                 # Battery setup or unknown panels: use measured surplus
                 solar_surplus_w = solax.solar_w - home_demand_w
             
-            # Grid allowance: use grid import limit if set, otherwise use budget
-            # These are independent constraints - you can have a limit without a budget
-            if grid_import_limit_w > 0:
-                grid_allowance_w = grid_import_limit_w
-            elif grid_budget_remaining > 0:
-                grid_allowance_w = 20000  # No specific limit, but budget exists
-            else:
-                grid_allowance_w = 0  # No limit and no budget
-            
+            # Departure mode: unlimited grid to meet deadline (grid import limit does NOT apply)
+            grid_allowance_w = 20000
             available_w = solar_surplus_w + grid_allowance_w
             state.solar_buffer.append(available_w)
             smoothed = state.smoothed_available_w
@@ -754,23 +748,18 @@ async def _control_tick(user_id: str) -> None:
             if min_amps_for_departure > target_amps:
                 target_amps = min(32, min_amps_for_departure)
 
-            # Apply grid import limit as ceiling (but departure urgency can override)
-            if grid_import_limit_w > 0 and departure_status != "passed":
-                target_amps = _apply_grid_import_limit(
-                    target_amps, current_amps, solax.grid_import_w,
-                    grid_import_limit_w, circuit_voltage, state.user_id
-                )
-
             if target_amps < 5 and target_amps > 0:
                 target_amps = 5  # Departure mode: keep charging at minimum
 
             final_amps = target_amps
+            
+            # Set mode with departure urgency messaging
             if soc_gap <= 0:
                 state.mode = "Target SoC Reached"
             elif departure_status == "passed":
                 state.mode = "Departure Passed – Max Charge"
             elif departure_status == "may_not_reach":
-                state.mode = "Ready by Departure – Urgent"
+                state.mode = f"Departure Urgent – Cannot reach {target_soc}% by {departure_time_str}"
             else:
                 state.mode = "Ready by Departure"
             logger.debug(
