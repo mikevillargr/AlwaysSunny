@@ -124,6 +124,7 @@ export function Dashboard() {
         tessieEnabled={tessieEnabled}
         chargePortConnected={status.charge_port_connected}
         autoOptimize={autoOptimize}
+        teslaChargeCurrentRequest={status.tesla_charge_current_request}
       />
 
       <Grid container spacing={3} justifyContent="center">

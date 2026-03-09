@@ -65,6 +65,7 @@ interface ChargingControlsProps {
   tessieEnabled?: boolean
   chargePortConnected?: boolean
   autoOptimize?: boolean
+  teslaChargeCurrentRequest?: number
 }
 
 export function ChargingControls({
@@ -76,6 +77,7 @@ export function ChargingControls({
   tessieEnabled = true,
   chargePortConnected = false,
   autoOptimize = false,
+  teslaChargeCurrentRequest = 0,
 }: ChargingControlsProps) {
   const controlsEnabled = tessieEnabled && chargePortConnected
   const [targetSoC, setTargetSoC] = useState<number>(80)
@@ -1021,6 +1023,17 @@ export function ChargingControls({
                 }}
               >
                 Currently importing {Math.round(gridImportW)}W
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#f59e0b',
+                  display: 'block',
+                  mb: 0.5,
+                  fontWeight: 500,
+                }}
+              >
+                Commanding {teslaChargeCurrentRequest}A to stay under limit
               </Typography>
               <Typography
                 variant="caption"
