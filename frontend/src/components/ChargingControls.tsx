@@ -603,16 +603,18 @@ export function ChargingControls({
             </Box>
             {/* No Budget toggle pill */}
             <Box
-              onClick={() => {
+              onClick={async () => {
                 const next = !noBudget
                 setNoBudget(next)
                 if (next) {
                   // Disable budget → save 0
-                  saveSettingsNow({ daily_grid_budget_kwh: 0 })
+                  await saveSettingsNow({ daily_grid_budget_kwh: 0 })
                 } else {
                   // Re-enable → save current value
-                  saveSettingsNow({ daily_grid_budget_kwh: gridBudget })
+                  await saveSettingsNow({ daily_grid_budget_kwh: gridBudget })
                 }
+                setBudgetSaved(true)
+                setTimeout(() => setBudgetSaved(false), 2000)
               }}
               sx={{
                 display: 'flex',
@@ -621,22 +623,22 @@ export function ChargingControls({
                 px: 1.25,
                 py: 0.4,
                 borderRadius: '20px',
-                border: noBudget ? '1px solid #3b82f6' : '1px solid #2a3f57',
-                backgroundColor: noBudget
-                  ? 'rgba(59,130,246,0.12)'
-                  : 'transparent',
-                color: noBudget ? '#3b82f6' : '#4a6382',
+                border: budgetSaved ? '1px solid #10b981' : (noBudget ? '1px solid #3b82f6' : '1px solid #2a3f57'),
+                backgroundColor: budgetSaved
+                  ? 'rgba(16,185,129,0.12)'
+                  : (noBudget ? 'rgba(59,130,246,0.12)' : 'transparent'),
+                color: budgetSaved ? '#10b981' : (noBudget ? '#3b82f6' : '#4a6382'),
                 cursor: 'pointer',
                 transition: 'all 0.18s ease',
                 userSelect: 'none',
                 flexShrink: 0,
                 '&:hover': {
-                  borderColor: '#3b82f6',
-                  color: '#3b82f6',
+                  borderColor: budgetSaved ? '#10b981' : '#3b82f6',
+                  color: budgetSaved ? '#10b981' : '#3b82f6',
                 },
               }}
             >
-              <Infinity size={11} />
+              {budgetSaved ? <Check size={11} /> : <Infinity size={11} />}
               <Typography
                 variant="caption"
                 sx={{
@@ -646,7 +648,7 @@ export function ChargingControls({
                   letterSpacing: 0.3,
                 }}
               >
-                No Budget
+                {budgetSaved ? 'Saved' : 'No Budget'}
               </Typography>
             </Box>
           </Box>
@@ -858,16 +860,18 @@ export function ChargingControls({
             </Box>
             {/* No Limit toggle pill */}
             <Box
-              onClick={() => {
+              onClick={async () => {
                 const next = !noLimit
                 setNoLimit(next)
                 if (next) {
                   // Disable limit → save 0
-                  saveSettingsNow({ max_grid_import_w: 0 })
+                  await saveSettingsNow({ max_grid_import_w: 0 })
                 } else {
                   // Re-enable → save current value
-                  saveSettingsNow({ max_grid_import_w: gridImportLimit })
+                  await saveSettingsNow({ max_grid_import_w: gridImportLimit })
                 }
+                setLimitSaved(true)
+                setTimeout(() => setLimitSaved(false), 2000)
               }}
               sx={{
                 display: 'flex',
@@ -876,22 +880,22 @@ export function ChargingControls({
                 px: 1.25,
                 py: 0.4,
                 borderRadius: '20px',
-                border: noLimit ? '1px solid #f59e0b' : '1px solid #2a3f57',
-                backgroundColor: noLimit
-                  ? 'rgba(245,158,11,0.12)'
-                  : 'transparent',
-                color: noLimit ? '#f59e0b' : '#4a6382',
+                border: limitSaved ? '1px solid #10b981' : (noLimit ? '1px solid #f59e0b' : '1px solid #2a3f57'),
+                backgroundColor: limitSaved
+                  ? 'rgba(16,185,129,0.12)'
+                  : (noLimit ? 'rgba(245,158,11,0.12)' : 'transparent'),
+                color: limitSaved ? '#10b981' : (noLimit ? '#f59e0b' : '#4a6382'),
                 cursor: 'pointer',
                 transition: 'all 0.18s ease',
                 userSelect: 'none',
                 flexShrink: 0,
                 '&:hover': {
-                  borderColor: '#f59e0b',
-                  color: '#f59e0b',
+                  borderColor: limitSaved ? '#10b981' : '#f59e0b',
+                  color: limitSaved ? '#10b981' : '#f59e0b',
                 },
               }}
             >
-              <Infinity size={11} />
+              {limitSaved ? <Check size={11} /> : <Infinity size={11} />}
               <Typography
                 variant="caption"
                 sx={{
@@ -901,7 +905,7 @@ export function ChargingControls({
                   letterSpacing: 0.3,
                 }}
               >
-                No Limit
+                {limitSaved ? 'Saved' : 'No Limit'}
               </Typography>
             </Box>
           </Box>
