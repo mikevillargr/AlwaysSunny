@@ -734,7 +734,16 @@ async def _control_tick(user_id: str) -> None:
             else:
                 # Battery setup or unknown panels: use measured surplus
                 solar_surplus_w = solax.solar_w - home_demand_w
-            grid_allowance_w = grid_import_limit_w if grid_budget_remaining > 0 else 0
+            
+            # Grid allowance: use grid import limit if set, otherwise use budget
+            # These are independent constraints - you can have a limit without a budget
+            if grid_import_limit_w > 0:
+                grid_allowance_w = grid_import_limit_w
+            elif grid_budget_remaining > 0:
+                grid_allowance_w = 20000  # No specific limit, but budget exists
+            else:
+                grid_allowance_w = 0  # No limit and no budget
+            
             available_w = solar_surplus_w + grid_allowance_w
             state.solar_buffer.append(available_w)
             smoothed = state.smoothed_available_w
