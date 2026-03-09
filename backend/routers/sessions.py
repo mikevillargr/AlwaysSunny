@@ -219,9 +219,17 @@ async def list_sessions(
     except Exception as e:
         logger.warning(f"[{user['id'][:8]}] Failed to overlay live session data: {e}")
 
-    # Mark each session with is_live flag — only true if tracker confirms it
+    # Mark each session with is_live flag
+    # Primary: tracker confirms it (most accurate)
+    # Fallback: session is open in DB (ended_at is null)
     for s in sessions:
-        s["is_live"] = (not s.get("ended_at") and s["id"] == active_db_id)
+        if active_db_id is not None:
+            # Tracker is running and has a session — trust it
+            s["is_live"] = (s["id"] == active_db_id)
+        else:
+            # No tracker session or tracker hasn't set db_session_id yet
+            # Fall back to DB state (any open session is considered live)
+            s["is_live"] = not s.get("ended_at")
 
     total = get_sessions_count(user["id"], started_after=started_after)
     return {"sessions": sessions, "count": len(sessions), "total": total, "offset": offset, "limit": limit}
