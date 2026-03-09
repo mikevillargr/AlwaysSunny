@@ -650,10 +650,13 @@ async def _control_tick(user_id: str) -> None:
     charging_strategy = state.settings.get("charging_strategy", "departure")
     current_amps = tesla.charger_actual_current
 
+    logger.info(f"[{state.user_id[:8]}] Control decision: final_amps={final_amps}, strategy={charging_strategy}, grid_import_limit={grid_import_limit_w}W")
+
     if final_amps is None:
         if charging_strategy == "solar":
             # === SOLAR-FIRST STRATEGY ===
             # Only charge from solar surplus. Pause when no surplus.
+            logger.info(f"[{state.user_id[:8]}] Entering solar-first mode")
             # Home demand = household minus Tesla (Solax includes Tesla in household)
             home_demand_w = max(0, solax.household_demand_w - (tesla.charging_kw * 1000))
             estimated_w, _, _ = _estimate_available_w(state)
@@ -667,13 +670,17 @@ async def _control_tick(user_id: str) -> None:
             smoothed = state.smoothed_available_w
             target_amps = int(smoothed / circuit_voltage)
             target_amps = max(0, min(32, target_amps))
+            
+            logger.info(f"[{state.user_id[:8]}] Solar-first calc: surplus={solar_surplus_w:.0f}W, target_amps={target_amps}A (before limit)")
 
             # Apply grid import limit as ceiling
             if grid_import_limit_w > 0:
+                pre_limit_amps = target_amps
                 target_amps = _apply_grid_import_limit(
                     target_amps, current_amps, solax.grid_import_w,
                     grid_import_limit_w, circuit_voltage, state.user_id
                 )
+                logger.info(f"[{state.user_id[:8]}] Grid import limit applied: {pre_limit_amps}A → {target_amps}A (grid={solax.grid_import_w:.0f}W, limit={grid_import_limit_w:.0f}W)")
 
             if target_amps < 5 and target_amps > 0:
                 target_amps = 0  # Solar-first: pause, don't trickle
