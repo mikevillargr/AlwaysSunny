@@ -434,6 +434,8 @@ async def _control_tick(user_id: str) -> None:
     state.settings = get_user_settings(user_id)
     state.ai_enabled = state.settings.get("ai_enabled", "false").lower() == "true"
     tessie_enabled = state.settings.get("tessie_enabled", "true").lower() == "true"
+    
+    logger.info(f"[{state.user_id[:8]}] ai_enabled={state.ai_enabled} (from settings: {state.settings.get('ai_enabled')})")
 
     # 1. Fetch external data
     data_ok = await _fetch_data(state)
