@@ -633,6 +633,8 @@ async def _control_tick(user_id: str) -> None:
             if trigger:
                 await _maybe_call_ai(state, trigger)
 
+            logger.info(f"[{state.user_id[:8]}] AI check: recommendation exists={state.ai_recommendation is not None}, is_fresh={state.ai_recommendation.is_fresh if state.ai_recommendation else 'N/A'}, amps={state.ai_recommendation.recommended_amps if state.ai_recommendation else 'N/A'}")
+            
             if (
                 state.ai_recommendation
                 and state.ai_recommendation.is_fresh
@@ -644,7 +646,7 @@ async def _control_tick(user_id: str) -> None:
                 # Note: 1-4A clamping already handled in AIRecommendation.__init__
                 final_amps = state.ai_recommendation.recommended_amps
                 state.mode = "AI Optimizing"
-                logger.debug(
+                logger.info(
                     f"[{state.user_id[:8]}] AI control: {final_amps}A "
                     f"({state.ai_recommendation.confidence}) — {state.ai_recommendation.reasoning[:40]}"
                 )
