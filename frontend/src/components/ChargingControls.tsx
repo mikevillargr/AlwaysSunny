@@ -16,6 +16,7 @@ import {
   Sun,
   Activity,
   Infinity,
+  Check,
 } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
@@ -88,6 +89,8 @@ export function ChargingControls({
   const [noBudget, setNoBudget] = useState<boolean>(false)
   const [noLimit, setNoLimit] = useState<boolean>(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [budgetSaved, setBudgetSaved] = useState(false)
+  const [limitSaved, setLimitSaved] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load settings from backend on mount
@@ -677,52 +680,79 @@ export function ChargingControls({
             </Box>
           ) : (
             <>
-              <TextField
-                type="number"
-                value={gridBudget}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value)
-                  setGridBudget(v)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    saveSettingsNow({ daily_grid_budget_kwh: gridBudget })
-                    e.currentTarget.blur()
-                  }
-                }}
-                onBlur={() => saveSettingsNow({ daily_grid_budget_kwh: gridBudget })}
-                variant="outlined"
-                size="small"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Typography variant="caption" color="text.secondary">
-                        KW
-                      </Typography>
-                    </InputAdornment>
-                  ),
-                  inputProps: {
-                    min: 0,
-                    max: 20,
-                    step: 0.5,
-                  },
-                }}
-                sx={{
-                  width: 100,
-                  mb: 1.5,
-                  '& .MuiOutlinedInput-root': {
-                    '& fieldset': {
-                      borderColor: '#2a3f57',
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1.5 }}>
+                <TextField
+                  type="number"
+                  value={gridBudget}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    setGridBudget(v)
+                    setBudgetSaved(false)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      saveSettingsNow({ daily_grid_budget_kwh: gridBudget })
+                      setBudgetSaved(true)
+                      setTimeout(() => setBudgetSaved(false), 2000)
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  variant="outlined"
+                  size="small"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Typography variant="caption" color="text.secondary">
+                          kWh
+                        </Typography>
+                      </InputAdornment>
+                    ),
+                    inputProps: {
+                      min: 0,
+                      max: 20,
+                      step: 0.5,
                     },
-                    '&:hover fieldset': {
-                      borderColor: '#3b82f6',
+                  }}
+                  sx={{
+                    width: 100,
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': {
+                        borderColor: '#2a3f57',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: '#3b82f6',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#3b82f6',
+                      },
                     },
-                    '&.Mui-focused fieldset': {
-                      borderColor: '#3b82f6',
+                  }}
+                />
+                <Box
+                  onClick={async () => {
+                    await saveSettingsNow({ daily_grid_budget_kwh: gridBudget })
+                    setBudgetSaved(true)
+                    setTimeout(() => setBudgetSaved(false), 2000)
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 32,
+                    height: 32,
+                    borderRadius: '6px',
+                    backgroundColor: budgetSaved ? '#10b981' : '#3b82f6',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: budgetSaved ? '#059669' : '#2563eb',
                     },
-                  },
-                }}
-              />
+                  }}
+                >
+                  {budgetSaved ? <Check size={16} /> : <Typography variant="caption" fontWeight="600">✓</Typography>}
+                </Box>
+              </Box>
               <Box
                 sx={{
                   display: 'flex',
@@ -905,52 +935,79 @@ export function ChargingControls({
             </Box>
           ) : (
             <>
-              <TextField
-                type="number"
-                value={gridImportLimit}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value)
-                  setGridImportLimit(v)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    saveSettingsNow({ max_grid_import_w: gridImportLimit })
-                    e.currentTarget.blur()
-                  }
-                }}
-                onBlur={() => saveSettingsNow({ max_grid_import_w: gridImportLimit })}
-                variant="outlined"
-                size="small"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Typography variant="caption" color="text.secondary">
-                        W
-                      </Typography>
-                    </InputAdornment>
-                  ),
-                  inputProps: {
-                    min: 0,
-                    max: 20000,
-                    step: 50,
-                  },
-                }}
-                sx={{
-                  width: 110,
-                  mb: 1.5,
-                  '& .MuiOutlinedInput-root': {
-                    '& fieldset': {
-                      borderColor: '#2a3f57',
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1.5 }}>
+                <TextField
+                  type="number"
+                  value={gridImportLimit}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    setGridImportLimit(v)
+                    setLimitSaved(false)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      saveSettingsNow({ max_grid_import_w: gridImportLimit })
+                      setLimitSaved(true)
+                      setTimeout(() => setLimitSaved(false), 2000)
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  variant="outlined"
+                  size="small"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Typography variant="caption" color="text.secondary">
+                          W
+                        </Typography>
+                      </InputAdornment>
+                    ),
+                    inputProps: {
+                      min: 0,
+                      max: 20000,
+                      step: 50,
                     },
-                    '&:hover fieldset': {
-                      borderColor: '#f59e0b',
+                  }}
+                  sx={{
+                    width: 110,
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': {
+                        borderColor: '#2a3f57',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: '#f59e0b',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#f59e0b',
+                      },
                     },
-                    '&.Mui-focused fieldset': {
-                      borderColor: '#f59e0b',
+                  }}
+                />
+                <Box
+                  onClick={async () => {
+                    await saveSettingsNow({ max_grid_import_w: gridImportLimit })
+                    setLimitSaved(true)
+                    setTimeout(() => setLimitSaved(false), 2000)
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 32,
+                    height: 32,
+                    borderRadius: '6px',
+                    backgroundColor: limitSaved ? '#10b981' : '#f59e0b',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: limitSaved ? '#059669' : '#d97706',
                     },
-                  },
-                }}
-              />
+                  }}
+                >
+                  {limitSaved ? <Check size={16} /> : <Typography variant="caption" fontWeight="600">✓</Typography>}
+                </Box>
+              </Box>
               <Typography
                 variant="caption"
                 color="text.secondary"
