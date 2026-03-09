@@ -87,6 +87,9 @@ class UserLoopState:
     # Tessie charge history reconciliation (daily)
     last_tessie_reconcile: float = 0
 
+    # Phantom session cleanup (hourly)
+    last_phantom_cleanup: float = 0
+
     # Credentials (cached from DB)
     creds: dict = field(default_factory=dict)
     settings: dict = field(default_factory=dict)
@@ -913,7 +916,19 @@ async def _control_tick(user_id: str) -> None:
     except Exception as e:
         logger.error(f"[{state.user_id[:8]}] Snapshot save failed: {e}")
 
-    # 9. Daily Tessie charge history reconciliation
+    # 9. Periodic phantom session cleanup
+    # Runs once per hour — closes any orphaned open sessions that aren't actively tracked
+    if now - state.last_phantom_cleanup > 3600:
+        state.last_phantom_cleanup = now
+        try:
+            from routers.sessions import _close_phantom_sessions
+            closed = _close_phantom_sessions(user_id)
+            if closed > 0:
+                logger.info(f"[{user_id[:8]}] Phantom session cleanup: closed {closed} orphaned session(s)")
+        except Exception as e:
+            logger.warning(f"[{user_id[:8]}] Phantom session cleanup failed: {e}")
+
+    # 10. Daily Tessie charge history reconciliation
     # Runs once per 24h — backfills sessions missed by the tracker
     if now - state.last_tessie_reconcile > 86400:
         state.last_tessie_reconcile = now

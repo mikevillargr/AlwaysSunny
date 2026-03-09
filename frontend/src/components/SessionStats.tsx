@@ -53,7 +53,7 @@ export function SessionStats({
   const dimmed = !tessieEnabled
   const isCharging = chargePortConnected && session != null
 
-  if (!isCharging && !session) {
+  if (!isCharging) {
     return (
       <Card
         sx={{
