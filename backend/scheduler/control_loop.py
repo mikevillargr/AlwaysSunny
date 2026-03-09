@@ -48,7 +48,7 @@ class UserLoopState:
 
     user_id: str
     mode: str = "Suspended – Unplugged"
-    ai_enabled: bool = True
+    ai_enabled: bool = False
     ai_status: str = "standby"
 
     # Latest data from external APIs
