@@ -684,6 +684,12 @@ export function ChargingControls({
                   const v = parseFloat(e.target.value)
                   setGridBudget(v)
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    saveSettingsNow({ daily_grid_budget_kwh: gridBudget })
+                    e.currentTarget.blur()
+                  }
+                }}
                 onBlur={() => saveSettingsNow({ daily_grid_budget_kwh: gridBudget })}
                 variant="outlined"
                 size="small"
@@ -905,6 +911,12 @@ export function ChargingControls({
                 onChange={(e) => {
                   const v = parseFloat(e.target.value)
                   setGridImportLimit(v)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    saveSettingsNow({ max_grid_import_w: gridImportLimit })
+                    e.currentTarget.blur()
+                  }
                 }}
                 onBlur={() => saveSettingsNow({ max_grid_import_w: gridImportLimit })}
                 variant="outlined"
