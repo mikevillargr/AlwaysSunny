@@ -291,6 +291,23 @@ async def ollama_restart(
     }
 
 
+@router.post("/admin/cleanup-phantom-sessions")
+async def cleanup_phantom_sessions(
+    admin: dict = Depends(get_admin_user),
+):
+    """Manually trigger phantom session cleanup to close orphaned open sessions."""
+    from routers.sessions import _close_phantom_sessions
+    
+    user_id = admin["id"]
+    closed = _close_phantom_sessions(user_id)
+    
+    return {
+        "success": True,
+        "closed_count": closed,
+        "message": f"Closed {closed} phantom session(s)"
+    }
+
+
 @router.post("/admin/recalculate-sessions")
 async def recalculate_sessions(
     admin: dict = Depends(get_admin_user),
