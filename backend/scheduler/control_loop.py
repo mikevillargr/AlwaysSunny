@@ -675,6 +675,13 @@ async def _control_tick(user_id: str) -> None:
             target_amps = int(smoothed / circuit_voltage)
             target_amps = max(0, min(32, target_amps))
 
+            # Apply grid import limit as ceiling
+            if grid_import_limit_w > 0:
+                target_amps = _apply_grid_import_limit(
+                    target_amps, current_amps, solax.grid_import_w,
+                    grid_import_limit_w, circuit_voltage, state.user_id
+                )
+
             if target_amps < 5 and target_amps > 0:
                 target_amps = 0  # Solar-first: pause, don't trickle
 
@@ -738,6 +745,13 @@ async def _control_tick(user_id: str) -> None:
             if min_amps_for_departure > target_amps:
                 target_amps = min(32, min_amps_for_departure)
 
+            # Apply grid import limit as ceiling (but departure urgency can override)
+            if grid_import_limit_w > 0 and departure_status != "passed":
+                target_amps = _apply_grid_import_limit(
+                    target_amps, current_amps, solax.grid_import_w,
+                    grid_import_limit_w, circuit_voltage, state.user_id
+                )
+
             if target_amps < 5 and target_amps > 0:
                 target_amps = 5  # Departure mode: keep charging at minimum
 
@@ -753,20 +767,6 @@ async def _control_tick(user_id: str) -> None:
             logger.debug(
                 f"[{state.user_id[:8]}] Departure: gap={soc_gap}% need={kwh_needed:.1f}kWh "
                 f"min_amps={min_amps_for_departure} → {final_amps}A ({departure_status})"
-            )
-
-    # 4d. Apply grid import limit as hard constraint (overrides AI and rule-based)
-    # This ensures the limit is enforced regardless of control mode
-    if final_amps is not None and final_amps > 0 and grid_import_limit_w > 0:
-        pre_limit_amps = final_amps
-        final_amps = _apply_grid_import_limit(
-            final_amps, current_amps, solax.grid_import_w,
-            grid_import_limit_w, circuit_voltage, state.user_id
-        )
-        if final_amps != pre_limit_amps:
-            logger.info(
-                f"[{state.user_id[:8]}] Grid import limit enforced: "
-                f"{pre_limit_amps}A → {final_amps}A (limit: {grid_import_limit_w:.0f}W, current: {solax.grid_import_w:.0f}W)"
             )
 
     # 5. Send Tesla command (only if tessie_enabled and we have a definite setpoint)
