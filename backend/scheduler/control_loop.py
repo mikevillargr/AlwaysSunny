@@ -435,6 +435,11 @@ async def _control_tick(user_id: str) -> None:
     state.ai_enabled = state.settings.get("ai_enabled", "false").lower() == "true"
     tessie_enabled = state.settings.get("tessie_enabled", "true").lower() == "true"
     
+    # Clear stale AI recommendation when AI is disabled
+    if not state.ai_enabled and state.ai_recommendation:
+        logger.info(f"[{state.user_id[:8]}] AI disabled - clearing stale recommendation")
+        state.ai_recommendation = None
+    
     logger.info(f"[{state.user_id[:8]}] ai_enabled={state.ai_enabled} (from settings: {state.settings.get('ai_enabled')})")
 
     # 1. Fetch external data
