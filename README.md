@@ -78,4 +78,4 @@ Magic Patterns design: https://www.magicpatterns.com/c/9chry93xuchicrfkq8z7ae
 
 ## License
 
-Personal use project.
+MIT License - see [LICENSE](LICENSE) file for details.
