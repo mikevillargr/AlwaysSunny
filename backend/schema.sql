@@ -71,7 +71,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     start_soc INTEGER,
     end_soc INTEGER,
     target_soc INTEGER,
-    subsidy_calculation_method TEXT DEFAULT 'estimated'
+    subsidy_calculation_method TEXT DEFAULT 'estimated',
+    -- Location and cost tracking for away/supercharger sessions
+    latitude REAL,
+    longitude REAL,
+    location_name TEXT,
+    is_supercharger BOOLEAN DEFAULT FALSE,
+    actual_cost REAL,
+    charged_at_home BOOLEAN DEFAULT TRUE
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_started

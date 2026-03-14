@@ -1021,10 +1021,15 @@ def _estimate_solar_from_snapshots(
 async def _reconcile_tessie_charges(
     user_id: str, api_key: str, vin: str, electricity_rate: float
 ) -> None:
-    """Fetch recent Tessie charges and backfill any missing DB sessions."""
+    """Fetch recent Tessie charges and backfill any missing DB sessions.
+    
+    Only backfills home charging sessions. Supercharger and away sessions are excluded
+    since they don't involve solar and have their own costs.
+    """
     import httpx
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-    from services.supabase_client import get_supabase_admin
+    from services.supabase_client import get_supabase_admin, get_user_settings
+    from services.tessie import is_at_home_gps
 
     now_ts = int(time.time())
     week_ago = now_ts - 7 * 86400
@@ -1041,20 +1046,56 @@ async def _reconcile_tessie_charges(
     if not tessie_charges:
         return
 
+    # Get user's home location for GPS check
+    settings = get_user_settings(user_id)
+    home_lat = float(settings.get("home_lat", 0))
+    home_lon = float(settings.get("home_lon", 0))
+    geofence_radius_m = float(settings.get("geofence_radius_m", 100))
+
     sb = get_supabase_admin()
     cutoff = (_dt.now(_tz.utc) - _td(days=7)).isoformat()
     db_result = sb.table("sessions").select("id,started_at").eq("user_id", user_id).gte("started_at", cutoff).execute()
     db_starts = [_dt.fromisoformat(ds["started_at"]) for ds in (db_result.data or [])]
 
     backfilled = 0
+    skipped_away = 0
     for tc in tessie_charges:
         tc_start = _dt.fromtimestamp(tc["started_at"], tz=_tz.utc)
         tc_kwh = tc.get("energy_added", 0)
+        
+        # Skip trivial charges
         if tc_kwh < 0.5:
             continue
+            
+        # Skip if already in DB
         if any(abs((tc_start - ds).total_seconds()) < 600 for ds in db_starts):
             continue
 
+        # CRITICAL: Skip supercharger and away sessions
+        # These don't involve home solar and have their own costs from Tessie
+        is_supercharger = tc.get("is_supercharger", False)
+        tc_lat = tc.get("latitude", 0)
+        tc_lon = tc.get("longitude", 0)
+        
+        # Check if charged at home using GPS proximity
+        charged_at_home = False
+        if home_lat and home_lon and tc_lat and tc_lon:
+            charged_at_home = is_at_home_gps(
+                tc_lat, tc_lon, home_lat, home_lon, 
+                radius_km=geofence_radius_m / 1000.0
+            )
+        
+        # Skip if supercharger or not at home
+        if is_supercharger or not charged_at_home:
+            skipped_away += 1
+            logger.debug(
+                f"[{user_id[:8]}] Skipping away charge: "
+                f"{tc.get('saved_location', 'Unknown')} "
+                f"(supercharger={is_supercharger}, at_home={charged_at_home})"
+            )
+            continue
+
+        # Only backfill home charging sessions
         tc_end = _dt.fromtimestamp(tc["ended_at"], tz=_tz.utc) if tc.get("ended_at") else None
         duration_mins = round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else 0
 
@@ -1075,12 +1116,20 @@ async def _reconcile_tessie_charges(
             "end_soc": tc.get("ending_battery", 0),
             "target_soc": tc.get("ending_battery", 80),
             "electricity_rate": electricity_rate,
+            "latitude": tc_lat,
+            "longitude": tc_lon,
+            "location_name": tc.get("saved_location"),
+            "is_supercharger": False,
+            "charged_at_home": True,
             **solar_est,
         }).execute()
         backfilled += 1
 
-    if backfilled:
-        logger.info(f"[{user_id[:8]}] Tessie reconciliation: backfilled {backfilled} missed sessions")
+    if backfilled or skipped_away:
+        logger.info(
+            f"[{user_id[:8]}] Tessie reconciliation: "
+            f"backfilled {backfilled} home sessions, skipped {skipped_away} away/supercharger"
+        )
 
 
 def _get_ollama_health() -> bool:

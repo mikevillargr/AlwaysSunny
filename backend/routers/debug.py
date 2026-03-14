@@ -598,6 +598,9 @@ async def backfill_from_tessie(
 
     settings = _get_settings(user_id)
     electricity_rate = float(settings.get("electricity_rate", "10.83"))
+    home_lat = float(settings.get("home_lat", 0))
+    home_lon = float(settings.get("home_lon", 0))
+    geofence_radius_m = float(settings.get("geofence_radius_m", 100))
 
     # Fetch Tessie charges
     now = int(time.time())
@@ -640,7 +643,28 @@ async def backfill_from_tessie(
             skipped.append({"tessie_id": tc["id"], "reason": "already in DB"})
             continue
 
-        # Create session record from Tessie data
+        # CRITICAL: Skip supercharger and away sessions
+        is_supercharger = tc.get("is_supercharger", False)
+        tc_lat = tc.get("latitude", 0)
+        tc_lon = tc.get("longitude", 0)
+        
+        # Check if charged at home using GPS proximity
+        from services.tessie import is_at_home_gps
+        charged_at_home = False
+        if home_lat and home_lon and tc_lat and tc_lon:
+            charged_at_home = is_at_home_gps(
+                tc_lat, tc_lon, home_lat, home_lon,
+                radius_km=geofence_radius_m / 1000.0
+            )
+        
+        if is_supercharger or not charged_at_home:
+            skipped.append({
+                "tessie_id": tc["id"],
+                "reason": f"away/supercharger ({tc.get('saved_location', 'Unknown')})"
+            })
+            continue
+
+        # Create session record from Tessie data (home charging only)
         duration_mins = round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else 0
 
         # Estimate solar from Solax snapshots if available
@@ -661,6 +685,11 @@ async def backfill_from_tessie(
             "end_soc": tc.get("ending_battery", 0),
             "target_soc": tc.get("ending_battery", 80),
             "electricity_rate": electricity_rate,
+            "latitude": tc_lat,
+            "longitude": tc_lon,
+            "location_name": tc.get("saved_location"),
+            "is_supercharger": False,
+            "charged_at_home": True,
             **solar_est,
         }
         try:
