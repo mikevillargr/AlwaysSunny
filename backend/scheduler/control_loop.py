@@ -880,7 +880,34 @@ async def _control_tick(user_id: str) -> None:
             )
             logger.info(f"[{state.user_id[:8]}] Recovered session #{db_active['id']}, start_grid_kwh={start_grid_kwh:.2f}")
         else:
-            state.session_tracker._recovered = True  # No DB session to recover
+            # No active session in DB, but car is charging at home
+            # Create a new session to track this charge
+            if at_home and tesla.charging_state == "Charging":
+                logger.info(f"[{state.user_id[:8]}] Car charging at home but no active session - creating new session")
+                session_data = {
+                    "user_id": user_id,
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "start_soc": tesla.battery_level,
+                    "target_soc": int(state.settings.get("target_soc", 100)),
+                    "electricity_rate": electricity_rate,
+                }
+                result = db_start_session(user_id, session_data)
+                if result.get("id"):
+                    # Initialize session tracker with the new session
+                    from services.session_tracker import ActiveSession
+                    state.session_tracker.active = ActiveSession(
+                        user_id=user_id,
+                        db_session_id=result["id"],
+                        start_time=time.time(),
+                        start_soc=tesla.battery_level,
+                        target_soc=int(state.settings.get("target_soc", 100)),
+                        start_grid_kwh=solax.consume_energy_kwh,
+                        electricity_rate=electricity_rate,
+                        subsidy_calculation_method="exact" if state.settings.get("has_home_battery", "false").lower() != "true" else "estimated",
+                    )
+                    upsert_user_setting(user_id, "_session_start_grid_kwh", str(solax.consume_energy_kwh))
+                    logger.info(f"[{state.user_id[:8]}] Created new session #{result['id']} for ongoing charge")
+            state.session_tracker._recovered = True  # Mark as recovered
 
     # Compute live solar-to-Tesla watts for session tracking (proportional allocation)
     _solar_to_tesla_w = _calc_solar_to_tesla_w(state)
