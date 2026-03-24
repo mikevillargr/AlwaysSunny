@@ -969,9 +969,9 @@ async def _control_tick(user_id: str) -> None:
         except Exception as e:
             logger.warning(f"[{user_id[:8]}] Phantom session cleanup failed: {e}")
 
-    # 10. Daily Tessie charge history reconciliation
-    # Runs once per 24h — backfills sessions missed by the tracker
-    if now - state.last_tessie_reconcile > 86400:
+    # 10. Hourly Tessie charge history reconciliation
+    # Runs once per hour — backfills sessions missed by the tracker
+    if now - state.last_tessie_reconcile > 3600:
         state.last_tessie_reconcile = now
         api_key = state.creds.get("tessie_api_key", "")
         vin = state.creds.get("tessie_vin", "")
@@ -1024,10 +1024,16 @@ def _estimate_solar_from_snapshots(
             continue
         total_kwh += tesla_w * elapsed_h / 1000.0
         sol_w = cur_s.get("solar_w") or 0
-        hh_w = cur_s.get("household_w") or 0
-        if hh_w > 0 and sol_w > 0:
-            solar_to_tesla = sol_w * (tesla_w / hh_w)
-            solar_kwh += min(sol_w, tesla_w, solar_to_tesla) * elapsed_h / 1000.0
+        grid_w = cur_s.get("grid_w") or 0
+        # Calculate solar proportion: solar / (solar + grid)
+        # This gives the percentage of energy coming from solar
+        # Then cap at actual solar generation (can't use more solar than is generated)
+        if sol_w > 0 and (sol_w + grid_w) > 0:
+            solar_pct = sol_w / (sol_w + grid_w)
+            solar_to_tesla = tesla_w * solar_pct
+            # Cap at actual solar generation
+            solar_to_tesla = min(solar_to_tesla, sol_w)
+            solar_kwh += solar_to_tesla * elapsed_h / 1000.0
 
     # Cap solar to not exceed actual kwh_added
     solar_kwh = min(solar_kwh, kwh_added)
