@@ -1025,11 +1025,15 @@ def _estimate_solar_from_snapshots(
         total_kwh += tesla_w * elapsed_h / 1000.0
         sol_w = cur_s.get("solar_w") or 0
         grid_w = cur_s.get("grid_w") or 0
-        # Calculate solar proportion of household energy: solar / (solar + grid)
-        # This gives the percentage of household energy coming from solar
-        # Then apply that proportion to Tesla's draw to get solar contribution to Tesla
-        if sol_w > 0 and (sol_w + grid_w) > 0:
-            solar_pct = sol_w / (sol_w + grid_w)
+        hh_w = cur_s.get("household_w") or 0
+        # Calculate solar proportion using total power (household + Tesla)
+        # Note: household_w in snapshots doesn't include Tesla (it's on separate circuit)
+        # So we add tesla_w to get total power demand
+        total_w = hh_w + tesla_w
+        # Solar proportion = solar / total power
+        # Then apply that proportion to Tesla's draw
+        if total_w > 0 and sol_w > 0:
+            solar_pct = sol_w / total_w
             solar_to_tesla = tesla_w * solar_pct
             solar_kwh += solar_to_tesla * elapsed_h / 1000.0
 
