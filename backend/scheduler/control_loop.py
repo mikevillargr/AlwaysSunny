@@ -454,6 +454,27 @@ async def _control_tick(user_id: str) -> None:
     # 2. Update trend buffers (always, for monitoring)
     state.trend_buffer.append(solax.solar_w)
 
+    # 2b. Save snapshot early (before any early returns) to preserve Solax data
+    # This ensures we have historical solar generation data even when car is unplugged/away
+    try:
+        snapshot = {
+            "timestamp": datetime.now().isoformat(),
+            "solar_w": solax.solar_w,
+            "grid_w": solax.grid_import_w,
+            "battery_soc": solax.battery_soc,
+            "battery_w": solax.battery_w,
+            "household_w": solax.household_demand_w,
+            "tesla_amps": tesla.charger_actual_current if tesla.charge_port_connected else 0,
+            "tesla_soc": tesla.battery_level,
+            "ai_recommended_amps": state.ai_recommendation.recommended_amps if state.ai_recommendation else None,
+            "ai_reasoning": state.ai_recommendation.reasoning if state.ai_recommendation else None,
+            "ai_confidence": state.ai_recommendation.confidence if state.ai_recommendation else None,
+            "mode": state.mode,
+        }
+        save_snapshot(user_id, snapshot)
+    except Exception as e:
+        logger.error(f"[{state.user_id[:8]}] Snapshot save failed: {e}")
+
     # 3. Hard stops — these are the ONLY conditions that should stop charging.
     #    Each one returns early. If none fire, charging continues undisturbed.
 
@@ -937,25 +958,8 @@ async def _control_tick(user_id: str) -> None:
         if db_id:
             db_end_session(db_id, data)
 
-    # 8. Store snapshot
-    try:
-        snapshot = {
-            "timestamp": datetime.now().isoformat(),
-            "solar_w": solax.solar_w,
-            "grid_w": solax.grid_import_w,
-            "battery_soc": solax.battery_soc,
-            "battery_w": solax.battery_w,
-            "household_w": solax.household_demand_w,
-            "tesla_amps": final_amps,
-            "tesla_soc": tesla.battery_level,
-            "ai_recommended_amps": state.ai_recommendation.recommended_amps if state.ai_recommendation else None,
-            "ai_reasoning": state.ai_recommendation.reasoning if state.ai_recommendation else None,
-            "ai_confidence": state.ai_recommendation.confidence if state.ai_recommendation else None,
-            "mode": state.mode,
-        }
-        save_snapshot(user_id, snapshot)
-    except Exception as e:
-        logger.error(f"[{state.user_id[:8]}] Snapshot save failed: {e}")
+    # 8. Snapshot already saved early in control loop (line 457-476)
+    # This was moved earlier to preserve data even when car is unplugged/away
 
     # 9. Periodic phantom session cleanup
     # Runs once per hour — closes any orphaned open sessions that aren't actively tracked
@@ -1344,6 +1348,28 @@ def register_user_loop(user_id: str) -> None:
             next_run_time=datetime.now(),  # Fire immediately on first registration
         )
         logger.info(f"[Scheduler] Registered control loop for user {user_id[:8]} (immediate first tick)")
+        
+        # Trigger Tessie reconciliation on startup to backfill any missed sessions
+        # This prevents data gaps from deployments/restarts
+        async def _startup_tessie_reconcile():
+            try:
+                import asyncio
+                await asyncio.sleep(5)  # Wait 5s for control loop to initialize
+                creds = get_user_credentials(user_id) or {}
+                settings = get_user_settings(user_id)
+                api_key = creds.get("tessie_api_key", "")
+                vin = creds.get("tessie_vin", "")
+                electricity_rate = float(settings.get("electricity_rate", 13.0))
+                
+                if api_key and vin:
+                    logger.info(f"[{user_id[:8]}] Running startup Tessie reconciliation")
+                    await _reconcile_tessie_charges(user_id, api_key, vin, electricity_rate)
+                    logger.info(f"[{user_id[:8]}] Startup Tessie reconciliation complete")
+            except Exception as e:
+                logger.warning(f"[{user_id[:8]}] Startup Tessie reconciliation failed: {e}")
+        
+        import asyncio
+        asyncio.create_task(_startup_tessie_reconcile())
 
 
 def unregister_user_loop(user_id: str) -> None:

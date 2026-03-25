@@ -123,7 +123,7 @@ async def fetch_tesla_state(api_key: str, vin: str) -> TeslaState:
         resp = await client.get(
             f"{TESSIE_BASE_URL}/{vin}/state",
             headers=_headers(api_key),
-            params={"use_cache": "true"},
+            params={"use_cache": "false"},
         )
         resp.raise_for_status()
         return TeslaState(resp.json())
