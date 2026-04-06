@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import httpx
 
-SOLAX_BASE_URL = "https://global.solaxcloud.com/proxyApp/proxy/api/getRealtimeInfo.do"
+SOLAX_BASE_URL = "https://www.solaxcloud.com/proxyApp/proxy/api/getRealtimeInfo.do"
 TIMEOUT = 15
 
 
@@ -90,7 +90,8 @@ async def fetch_solax_data(token_id: str, dongle_sn: str) -> SolaxData:
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         resp = await client.get(
             SOLAX_BASE_URL,
-            params={"tokenId": token_id, "sn": dongle_sn},
+            params={"sn": dongle_sn},
+            headers={"tokenId": token_id},
         )
         resp.raise_for_status()
         data = resp.json()
