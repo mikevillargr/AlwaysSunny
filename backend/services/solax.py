@@ -88,10 +88,9 @@ async def fetch_solax_data(token_id: str, dongle_sn: str) -> SolaxData:
         ValueError: if response indicates failure
     """
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
+        resp = await client.get(
             SOLAX_BASE_URL,
-            json={"wifiSn": dongle_sn},
-            headers={"tokenId": token_id},
+            params={"tokenId": token_id, "sn": dongle_sn},
         )
         resp.raise_for_status()
         data = resp.json()
