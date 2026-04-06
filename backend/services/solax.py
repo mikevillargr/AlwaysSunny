@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import httpx
 
-SOLAX_BASE_URL = "https://www.solaxcloud.com/proxyApp/proxy/api/getRealtimeInfo.do"
+SOLAX_BASE_URL = "https://global.solaxcloud.com/proxyApp/proxy/api/getRealtimeInfo.do"
 TIMEOUT = 15
 
 
