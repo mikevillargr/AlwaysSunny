@@ -452,18 +452,19 @@ async def _control_tick(user_id: str) -> None:
     tesla = state.tesla
 
     # 2. Update trend buffers (always, for monitoring)
-    state.trend_buffer.append(solax.solar_w)
+    if solax:
+        state.trend_buffer.append(solax.solar_w)
 
     # 2b. Save snapshot early (before any early returns) to preserve Solax data
     # This ensures we have historical solar generation data even when car is unplugged/away
     try:
         snapshot = {
             "timestamp": datetime.now().isoformat(),
-            "solar_w": solax.solar_w,
-            "grid_w": solax.grid_import_w,
-            "battery_soc": solax.battery_soc,
-            "battery_w": solax.battery_w,
-            "household_w": solax.household_demand_w,
+            "solar_w": solax.solar_w if solax else 0,
+            "grid_w": solax.grid_import_w if solax else 0,
+            "battery_soc": solax.battery_soc if solax else 0,
+            "battery_w": solax.battery_w if solax else 0,
+            "household_w": solax.household_demand_w if solax else 0,
             "tesla_amps": tesla.charger_actual_current if tesla.charge_port_connected else 0,
             "tesla_soc": tesla.battery_level,
             "ai_recommended_amps": state.ai_recommendation.recommended_amps if state.ai_recommendation else None,
@@ -509,27 +510,32 @@ async def _control_tick(user_id: str) -> None:
             state.daily_total_consumption_kwh = float(saved_consumption) if saved_consumption else 0.0
             logger.info(f"[{state.user_id[:8]}] Restored daily grid snapshot from DB: {state.daily_grid_start_kwh:.2f} kWh")
 
-    # New day (or first ever run) — take a fresh snapshot
-    if state.daily_grid_date != today_str:
-        state.daily_grid_start_kwh = solax.consume_energy_kwh
-        state.daily_grid_date = today_str
-        state.daily_total_consumption_kwh = 0.0
-        # Persist to DB
-        upsert_user_setting(user_id, "_daily_grid_date", today_str)
-        upsert_user_setting(user_id, "_daily_grid_start_kwh", str(solax.consume_energy_kwh))
-        upsert_user_setting(user_id, "_daily_total_consumption_kwh", "0.0")
-        logger.info(f"[{state.user_id[:8]}] Daily grid reset: start={solax.consume_energy_kwh:.2f} kWh (persisted)")
-    else:
-        # Accumulate total consumption each tick (~60s interval)
-        # household_demand_w × (60s / 3600s) = kWh per tick
-        state.daily_total_consumption_kwh += solax.household_demand_w * (60.0 / 3600.0)
-        # Persist every ~5 min (every 5th tick) to avoid excessive DB writes
-        tick_count = getattr(state, '_consumption_persist_counter', 0) + 1
-        state._consumption_persist_counter = tick_count
-        if tick_count % 5 == 0:
-            upsert_user_setting(user_id, "_daily_total_consumption_kwh", str(round(state.daily_total_consumption_kwh, 3)))
+    # Skip Solax-dependent logic if Solax data unavailable
+    if solax:
+        # New day (or first ever run) — take a fresh snapshot
+        if state.daily_grid_date != today_str:
+            state.daily_grid_start_kwh = solax.consume_energy_kwh
+            state.daily_grid_date = today_str
+            state.daily_total_consumption_kwh = 0.0
+            # Persist to DB
+            upsert_user_setting(user_id, "_daily_grid_date", today_str)
+            upsert_user_setting(user_id, "_daily_grid_start_kwh", str(solax.consume_energy_kwh))
+            upsert_user_setting(user_id, "_daily_total_consumption_kwh", "0.0")
+            logger.info(f"[{state.user_id[:8]}] Daily grid reset: start={solax.consume_energy_kwh:.2f} kWh (persisted)")
+        else:
+            # Accumulate total consumption each tick (~60s interval)
+            # household_demand_w × (60s / 3600s) = kWh per tick
+            state.daily_total_consumption_kwh += solax.household_demand_w * (60.0 / 3600.0)
+            # Persist every ~5 min (every 5th tick) to avoid excessive DB writes
+            tick_count = getattr(state, '_consumption_persist_counter', 0) + 1
+            state._consumption_persist_counter = tick_count
+            if tick_count % 5 == 0:
+                upsert_user_setting(user_id, "_daily_total_consumption_kwh", str(round(state.daily_total_consumption_kwh, 3)))
 
-    daily_grid_used = max(0, solax.consume_energy_kwh - state.daily_grid_start_kwh)
+        daily_grid_used = max(0, solax.consume_energy_kwh - state.daily_grid_start_kwh)
+    else:
+        daily_grid_used = 0
+        
     grid_budget = float(state.settings.get("daily_grid_budget_kwh", 0))
     grid_budget_remaining = max(0, grid_budget - daily_grid_used) if grid_budget > 0 else float('inf')
 
@@ -682,8 +688,19 @@ async def _control_tick(user_id: str) -> None:
 
     logger.info(f"[{state.user_id[:8]}] Control decision: final_amps={final_amps}, strategy={charging_strategy}, grid_import_limit={grid_import_limit_w}W")
 
+    # If Solax data unavailable, skip solar-based strategies
+    if not solax and charging_strategy == "solar":
+        logger.warning(f"[{state.user_id[:8]}] Solax data unavailable - cannot use solar-first mode")
+        state.mode = "Suspended – Solax Data Unavailable"
+        if tessie_enabled:
+            try:
+                await stop_charging(state.creds["tessie_api_key"], state.creds["tessie_vin"])
+            except Exception as e:
+                logger.error(f"[{state.user_id[:8]}] Failed to stop charging: {e}")
+        return
+
     if final_amps is None:
-        if charging_strategy == "solar":
+        if charging_strategy == "solar" and solax:
             # === SOLAR-FIRST STRATEGY ===
             # Only charge from solar surplus. Pause when no surplus.
             logger.info(f"[{state.user_id[:8]}] Entering solar-first mode")
@@ -922,11 +939,12 @@ async def _control_tick(user_id: str) -> None:
                         start_time=time.time(),
                         start_soc=tesla.battery_level,
                         target_soc=int(state.settings.get("target_soc", 100)),
-                        start_grid_kwh=solax.consume_energy_kwh,
+                        start_grid_kwh=solax.consume_energy_kwh if solax else 0,
                         electricity_rate=electricity_rate,
                         subsidy_calculation_method="exact" if state.settings.get("has_home_battery", "false").lower() != "true" else "estimated",
                     )
-                    upsert_user_setting(user_id, "_session_start_grid_kwh", str(solax.consume_energy_kwh))
+                    if solax:
+                        upsert_user_setting(user_id, "_session_start_grid_kwh", str(solax.consume_energy_kwh))
                     logger.info(f"[{state.user_id[:8]}] Created new session #{result['id']} for ongoing charge")
             state.session_tracker._recovered = True  # Mark as recovered
 
@@ -940,7 +958,7 @@ async def _control_tick(user_id: str) -> None:
         charging_state=tesla.charging_state,
         tesla_soc=tesla.battery_level,
         target_soc=int(state.settings.get("target_soc", 100)),
-        consume_energy_kwh=solax.consume_energy_kwh,
+        consume_energy_kwh=solax.consume_energy_kwh if solax else 0,
         electricity_rate=electricity_rate,
         charge_energy_added=tesla.charge_energy_added,
         subsidy_calculation_method="exact" if state.settings.get("has_home_battery", "false").lower() != "true" else "estimated",
@@ -949,7 +967,8 @@ async def _control_tick(user_id: str) -> None:
 
     if event == "started" and data:
         # Persist start_grid_kwh so it survives restarts
-        upsert_user_setting(user_id, "_session_start_grid_kwh", str(solax.consume_energy_kwh))
+        if solax:
+            upsert_user_setting(user_id, "_session_start_grid_kwh", str(solax.consume_energy_kwh))
         result = db_start_session(user_id, data)
         if state.session_tracker.active and result.get("id"):
             state.session_tracker.active.db_session_id = result["id"]
