@@ -23,9 +23,29 @@ async def lifespan(app: FastAPI):
     print(f"[AlwaysSunny] Ollama host: {settings_config.ollama_host}")
     start_scheduler()
     print("[AlwaysSunny] Control loop scheduler started")
-    # Warm up Ollama model and start health monitor in background (don't block startup)
+    
+    # Auto-register control loops for all users on startup
+    # This ensures continuous monitoring even when users don't access the app
     import asyncio
     from services.ollama import warmup_model, ollama_health_monitor
+    from scheduler.control_loop import register_user_loop
+    from services.supabase_client import get_supabase_admin
+    
+    async def auto_register_users():
+        await asyncio.sleep(2)  # Wait for scheduler to initialize
+        try:
+            sb = get_supabase_admin()
+            # Get all users who have credentials (active users)
+            result = sb.table("user_credentials").select("user_id").execute()
+            if result.data:
+                user_ids = list(set(row["user_id"] for row in result.data))
+                for user_id in user_ids:
+                    register_user_loop(user_id)
+                print(f"[AlwaysSunny] Auto-registered {len(user_ids)} user control loop(s)")
+        except Exception as e:
+            print(f"[AlwaysSunny] Auto-registration failed: {e}")
+    
+    asyncio.create_task(auto_register_users())
     asyncio.create_task(warmup_model())
     asyncio.create_task(ollama_health_monitor())
     yield
