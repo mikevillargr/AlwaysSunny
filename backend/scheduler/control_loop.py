@@ -144,8 +144,8 @@ async def _fetch_data(state: UserLoopState) -> bool:
             return False
     except Exception as e:
         logger.error(f"[{state.user_id[:8]}] Solax fetch failed: {e}")
-        if state.solax is None:
-            return False
+        # Continue with Tesla data even if Solax fails
+        # Snapshots will have null/cached solar values but sessions still track
 
     # Fetch Tesla state (every tick)
     try:
