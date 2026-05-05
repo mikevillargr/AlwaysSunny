@@ -288,3 +288,10 @@ async def current_session(user: dict = Depends(get_current_user)):
     """Get the currently active charging session, or null."""
     session = get_active_session(user["id"])
     return {"session": session}
+
+
+@router.post("/sessions/close-orphaned")
+async def close_orphaned_sessions(user: dict = Depends(get_current_user)):
+    """Manually close any orphaned sessions (admin/troubleshooting endpoint)."""
+    closed = _close_phantom_sessions(user["id"])
+    return {"closed": closed, "message": f"Closed {closed} orphaned session(s)"}
