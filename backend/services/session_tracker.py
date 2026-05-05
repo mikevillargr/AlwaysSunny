@@ -221,13 +221,15 @@ class SessionTracker:
             }
 
         # Detect session end
-        # Only end on physical unplug or Tesla reporting "Complete".
+        # End session when:
+        # 1. Car is unplugged, OR
+        # 2. Charging state becomes "Complete" or "Stopped"
         # Do NOT end on tesla_soc >= target_soc — user may change target mid-session
         # and this would cause premature session termination + stop_charging conflicts.
         if self.active is not None:
             should_end = (
                 not plugged_in
-                or charging_state == "Complete"
+                or charging_state in ("Complete", "Stopped")
             )
 
             if should_end:
