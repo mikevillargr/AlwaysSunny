@@ -84,10 +84,14 @@ async def get_status(user: dict = Depends(get_current_user)):
     # Ensure control loop is running for this user
     register_user_loop(user_id)
 
-    # Try real data from control loop
-    state = get_user_state(user_id)
-    if state and (state.tesla is not None or state.solax is not None):
-        return build_status_response(state)
+    # Try real data from control loop (with brief retry for post-restart)
+    import asyncio
+    for attempt in range(3):
+        state = get_user_state(user_id)
+        if state and (state.tesla is not None or state.solax is not None):
+            return build_status_response(state)
+        if attempt < 2:
+            await asyncio.sleep(0.5)  # Wait 500ms before retry
 
     # Fallback to sample data (before first control loop tick)
     return get_sample_status(user_id)
