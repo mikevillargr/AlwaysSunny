@@ -26,7 +26,7 @@ This is the core heartbeat of the app. Every tick:
 
 ```
 1. FETCH Solax data
-   └─ GET https://www.solaxcloud.com/proxyApp/proxy/api/getRealtimeInfo
+   └─ POST https://global.solaxcloud.com/api/v2/dataAccess/realtimeInfo/get
    └─ Extract: powerdc1, powerdc2, feedinpower, consumeenergy, batPower, soc, uploadTime
    └─ Derive:
         solar_yield_w     = powerdc1 + powerdc2
@@ -185,7 +185,7 @@ SESSION END detection:
   Conditions (any one triggers end):
     charge_port_connected == False                ← unplugged
     OR charging_state == "Complete"               ← Tesla finished
-    OR battery_level >= target_soc                ← target reached
+    OR charging_state == "Stopped"                ← charging stopped (e.g., scheduled stop)
 
   On end:
     └─ Finalise all deltas

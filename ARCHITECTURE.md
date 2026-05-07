@@ -213,7 +213,7 @@ AND previous state had charge_port_connected == False
 # Session ends when:
 charge_port_connected == False
 OR charging_state == "Complete"
-OR battery_level >= target_soc
+OR charging_state == "Stopped"
 
 # On session start: snapshot consumeenergy and battery_level
 # On session end: calculate deltas → write to sessions table

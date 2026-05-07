@@ -2,16 +2,21 @@
 
 ## 1. SolaxCloud API
 
-**Base URL:** `https://www.solaxcloud.com/proxyApp/proxy/api/`  
-**Auth:** tokenID passed as query parameter  
+**Base URL:** `https://global.solaxcloud.com/api/v2/`  
+**Auth:** tokenID passed in request headers  
 **Rate limit:** 10 requests/min, 10,000/day  
 **Recommended poll:** every 60 seconds  
 
 ### Get Realtime Data
 ```
-GET https://www.solaxcloud.com/proxyApp/proxy/api/getRealtimeInfo.do
-  ?tokenId={TOKEN_ID}
-  &sn={DONGLE_SN}
+POST https://global.solaxcloud.com/api/v2/dataAccess/realtimeInfo/get
+Headers:
+  tokenId: {TOKEN_ID}
+  Content-Type: application/json
+Body:
+  {
+    "wifiSn": "{DONGLE_SN}"
+  }
 ```
 
 **Response fields used by AlwaysSunny:**
