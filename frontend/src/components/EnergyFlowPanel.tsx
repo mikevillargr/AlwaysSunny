@@ -260,16 +260,16 @@ export function EnergyFlowPanel({
               color: '#14b8a6',
             },
             {
+              label: 'TESLA DEMAND',
+              value: tessieEnabled ? fmtComma(teslaW) : '—',
+              unit: tessieEnabled ? 'W' : '',
+              color: teslaColor,
+            },
+            {
               label: 'GRID IMPORT',
               value: `${gridImportW >= 0 ? '+' : ''}${fmtComma(Math.abs(gridImportW))}`,
               unit: 'W',
               color: '#3b82f6',
-            },
-            {
-              label: 'CHARGING',
-              value: tessieEnabled ? fmtComma(teslaW) : '—',
-              unit: tessieEnabled ? 'W' : '',
-              color: teslaColor,
             },
             {
               label: 'TESLA CHARGING SUBSIDIZED BY SOLAR',
