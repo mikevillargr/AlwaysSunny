@@ -37,7 +37,10 @@ export function EnergyFlowPanel({
   dailyTeslaSolarPct = 0,
   solarToTeslaW = 0,
 }: EnergyFlowPanelProps) {
-  const teslaW = teslaChargingKw * 1000
+  // Calculate Tesla watts - use kW if available, otherwise estimate from amps
+  const teslaW = teslaChargingKw > 0 
+    ? teslaChargingKw * 1000 
+    : teslaChargingAmps * 234  // Fallback: amps × typical L2 voltage
   const isCharging = chargingState === 'Charging' && chargePortConnected
   const isPluggedIn = chargePortConnected && !isCharging
   const isOffline = !chargePortConnected
@@ -261,8 +264,8 @@ export function EnergyFlowPanel({
             },
             {
               label: 'TESLA DEMAND',
-              value: tessieEnabled ? fmtComma(teslaW) : '—',
-              unit: tessieEnabled ? 'W' : '',
+              value: isCharging ? fmtComma(teslaW) : '—',
+              unit: isCharging ? 'W' : '',
               color: teslaColor,
             },
             {
