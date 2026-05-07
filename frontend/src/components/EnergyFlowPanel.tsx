@@ -264,8 +264,8 @@ export function EnergyFlowPanel({
             },
             {
               label: 'TESLA DEMAND',
-              value: isCharging ? fmtComma(teslaW) : '—',
-              unit: isCharging ? 'W' : '',
+              value: teslaW > 0 ? fmtComma(teslaW) : '—',
+              unit: teslaW > 0 ? 'W' : '',
               color: teslaColor,
             },
             {
