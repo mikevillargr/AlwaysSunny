@@ -191,12 +191,13 @@ class SessionTracker:
         # 1. Transition from unplugged to plugged at home, OR
         # 2. Car stays plugged but transitions to "Charging" from a non-charging state
         #    (e.g., Complete/Stopped → Charging when a new charge begins next day)
+        # 3. First run: car is already charging when backend starts (prev_state is empty)
         # Guard: never start a new session if one is already active
         is_new_plug = plugged_in and at_home and not self._prev_plugged_in
         is_new_charge = (
             plugged_in and at_home
             and charging_state == "Charging"
-            and self._prev_charging_state not in ("", "Charging")
+            and self._prev_charging_state != "Charging"
         )
         if (is_new_plug or is_new_charge) and self.active is None:
             now = time.time()
