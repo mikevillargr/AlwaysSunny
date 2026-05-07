@@ -86,7 +86,7 @@ async def get_status(user: dict = Depends(get_current_user)):
 
     # Try real data from control loop
     state = get_user_state(user_id)
-    if state and state.solax is not None:
+    if state and state.tesla is not None:
         return build_status_response(state)
 
     # Fallback to sample data (before first control loop tick)
