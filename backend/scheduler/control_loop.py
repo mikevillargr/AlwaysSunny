@@ -958,6 +958,18 @@ async def _control_tick(user_id: str) -> None:
     # Compute live solar-to-Tesla watts for session tracking (proportional allocation)
     _solar_to_tesla_w = _calc_solar_to_tesla_w(state)
 
+    # Validate in-memory session matches DB (self-healing)
+    # If tracker thinks there's an active session but DB says it's closed, clear the tracker
+    if state.session_tracker.active:
+        db_id = state.session_tracker.active.db_session_id
+        if db_id:
+            db_check = get_active_session(user_id)
+            if not db_check or db_check.get("id") != db_id:
+                logger.warning(
+                    f"[{state.user_id[:8]}] In-memory session #{db_id} doesn't match DB - clearing tracker"
+                )
+                state.session_tracker.active = None
+
     event, data = state.session_tracker.tick(
         user_id=user_id,
         plugged_in=tesla.charge_port_connected,
