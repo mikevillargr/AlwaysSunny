@@ -1156,6 +1156,14 @@ async def _reconcile_tessie_charges(
         # Only backfill home charging sessions
         tc_end = _dt.fromtimestamp(tc["ended_at"], tz=_tz.utc) if tc.get("ended_at") else None
         duration_mins = round((tc["ended_at"] - tc["started_at"]) / 60) if tc.get("ended_at") else 0
+        
+        # Skip unrealistic durations (>12 hours) - likely stale Tessie data
+        if duration_mins > 720:
+            logger.warning(
+                f"[{user_id[:8]}] Skipping Tessie charge with unrealistic duration: "
+                f"{duration_mins} mins ({duration_mins/60:.1f}h) - likely stale data"
+            )
+            continue
 
         # Estimate solar from snapshots if we have data for this time range
         solar_est = _estimate_solar_from_snapshots(
