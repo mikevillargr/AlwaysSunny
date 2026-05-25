@@ -139,8 +139,9 @@ async def _fetch_data(state: UserLoopState) -> bool:
                 state.creds["solax_dongle_sn"],
             )
             state.last_solax_fetch = now
+            logger.debug(f"[{state.user_id[:8]}] Solax fetch OK")
         else:
-            logger.warning(f"[{state.user_id[:8]}] Solax credentials not configured")
+            logger.warning(f"[{state.user_id[:8]}] Solax credentials not configured - returning False")
             return False
     except Exception as e:
         logger.error(f"[{state.user_id[:8]}] Solax fetch failed: {e}")
@@ -155,12 +156,14 @@ async def _fetch_data(state: UserLoopState) -> bool:
                 state.creds["tessie_vin"],
             )
             state.last_tessie_fetch = now
+            logger.debug(f"[{state.user_id[:8]}] Tesla fetch OK")
         else:
-            logger.warning(f"[{state.user_id[:8]}] Tessie credentials not configured")
+            logger.warning(f"[{state.user_id[:8]}] Tessie credentials not configured - returning False")
             return False
     except Exception as e:
         logger.error(f"[{state.user_id[:8]}] Tessie fetch failed: {e}")
         if state.tesla is None:
+            logger.warning(f"[{state.user_id[:8]}] No cached Tesla state - returning False")
             return False
 
     # Fetch location (every 5 minutes)
@@ -426,6 +429,7 @@ async def _control_tick(user_id: str) -> None:
     """Single control loop tick for one user."""
     state = _user_states.get(user_id)
     if not state:
+        logger.warning(f"[{user_id[:8]}] Control tick: no state found")
         return
 
     # Refresh credentials and settings from DB periodically
@@ -445,8 +449,11 @@ async def _control_tick(user_id: str) -> None:
     # 1. Fetch external data
     data_ok = await _fetch_data(state)
     if not data_ok:
+        logger.warning(f"[{state.user_id[:8]}] Control tick: data fetch failed, exiting early")
         state.mode = "Suspended – Data Unavailable"
         return
+    
+    logger.debug(f"[{state.user_id[:8]}] Control tick: data fetched successfully, continuing...")
 
     solax = state.solax
     tesla = state.tesla
