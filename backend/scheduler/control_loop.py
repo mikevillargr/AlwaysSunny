@@ -445,9 +445,11 @@ async def _control_tick(user_id: str) -> None:
         state.ai_recommendation = None
     
     logger.info(f"[{state.user_id[:8]}] ai_enabled={state.ai_enabled} (from settings: {state.settings.get('ai_enabled')})")
+    logger.error(f"[{state.user_id[:8]}] CHECKPOINT 1: About to call _fetch_data")
 
     # 1. Fetch external data
     data_ok = await _fetch_data(state)
+    logger.error(f"[{state.user_id[:8]}] CHECKPOINT 2: _fetch_data returned {data_ok}")
     if not data_ok:
         logger.error(f"[{state.user_id[:8]}] CONTROL LOOP EXITING: data fetch failed")
         state.mode = "Suspended – Data Unavailable"
