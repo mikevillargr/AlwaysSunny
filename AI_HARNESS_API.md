@@ -87,6 +87,12 @@ curl http://localhost:8000/api/ai/context \
     "solax": {"status": "connected"},
     ...
   },
+  "location": {
+    "latitude": 14.550147,
+    "longitude": 121.114333,
+    "is_home": true,
+    "detection_method": "geofence"
+  },
   "timestamp": "2026-05-30T09:30:00Z"
 }
 ```

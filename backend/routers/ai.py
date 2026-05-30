@@ -25,6 +25,7 @@ class AIContextResponse(BaseModel):
     recent_sessions: list[dict]
     settings: dict
     health: dict
+    location: Optional[dict]
     timestamp: str
 
 
@@ -87,12 +88,24 @@ async def get_ai_context(user: dict = Depends(get_current_user_flexible)):
     health_response = await get_health(user)
     health = health_response.dict()
     
+    # Get location from control loop state
+    location = None
+    state = get_user_state(user_id)
+    if state and state.location:
+        location = {
+            "latitude": state.location.latitude,
+            "longitude": state.location.longitude,
+            "is_home": state.location.is_home,
+            "detection_method": state.location.detection_method,
+        }
+    
     return AIContextResponse(
         status=status,
         active_session=active_session,
         recent_sessions=recent_sessions,
         settings=settings,
         health=health,
+        location=location,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
 

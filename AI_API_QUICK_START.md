@@ -61,6 +61,12 @@ curl http://76.13.191.149/api/ai/context \
     "tessie": {"status": "connected"},
     "solax": {"status": "connected"}
   },
+  "location": {
+    "latitude": 14.550147,
+    "longitude": 121.114333,
+    "is_home": true,
+    "detection_method": "geofence"
+  },
   "timestamp": "2026-05-30T09:30:00Z"
 }
 ```
@@ -397,12 +403,23 @@ From `/api/ai/context`, the most important fields for charging decisions:
 - `active_session.solar_kwh` - Solar energy used this session (kWh)
 - `active_session.solar_pct` - Percentage from solar (%)
 
+**Location:**
+- `location.latitude` - Current GPS latitude
+- `location.longitude` - Current GPS longitude
+- `location.is_home` - Is the car at home? (boolean)
+- `location.detection_method` - How location was determined ("geofence" | "wifi" | "gps")
+
 ## Decision Logic Example
 
 ```python
 def calculate_optimal_amps(context: dict) -> int:
     """Calculate optimal charging amps based on solar surplus."""
     status = context["status"]
+    location = context.get("location")
+    
+    # Only charge at home
+    if not location or not location.get("is_home"):
+        return 0
     
     # Extract key values
     solar_w = status["solar_w"]
