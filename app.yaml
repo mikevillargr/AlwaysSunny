@@ -5,7 +5,9 @@ repo: github.com/mikevillargr/AlwaysSunny
 server: hostinger-vps
 path: /opt/alwayssunny
 domains: []                     # none; served at http://76.13.191.149 (host port 80, no TLS)
-services: [backend, frontend]   # docker-compose.yml; backend internal :8000, frontend host :80
-depends_on: [ollama]            # TODO(verify): fleet id for the Hostinger 1-click Ollama container (/docker/ollama-zdkz) has not been assigned yet
+# backend internal :8000, frontend host :80 (docker-compose.yml). `ollama` is the separate
+# Hostinger 1-click container (/docker/ollama-zdkz, :3277), counted as part of this app (Mike, 2026-09-28).
+services: [backend, frontend, ollama]
+depends_on: []
 deploy: { trigger: push-main, workflow: deploy.yml }
 status: production
