@@ -1,0 +1,11 @@
+id: alwayssunny
+name: AlwaysSunny
+description: Solar-aware Tesla charging optimizer (Solax + Tessie + Open-Meteo, Ollama advisory AI, Supabase)
+repo: github.com/mikevillargr/AlwaysSunny
+server: hostinger-vps
+path: /opt/alwayssunny
+domains: []                     # none; served at http://76.13.191.149 (host port 80, no TLS)
+services: [backend, frontend]   # docker-compose.yml; backend internal :8000, frontend host :80
+depends_on: [ollama]            # TODO(verify): fleet id for the Hostinger 1-click Ollama container (/docker/ollama-zdkz) has not been assigned yet
+deploy: { trigger: push-main, workflow: deploy.yml }
+status: production
